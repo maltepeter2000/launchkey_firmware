@@ -5,6 +5,7 @@
  *                      Pad 1 is yellow and play/pause (bright = bit 1, dim = 0). While the hold
  *                      pad is down all eight are green and a press flips the bit; otherwise
  *                      pads 2..8 do nothing. The mode starts paused.
+ *   Play               play/pause as well (its stock MIDI Start / Stop is not sent then)
  *   bottom pads 8..14  scale notes (pad 9 = root, ...), white; press toggles (Scale on only);
  *                      the 8th note of 8-note scales is always on
  *   bottom pad 15      hold (pink): while held the top row is frozen on screen (the register
@@ -32,6 +33,7 @@
 #define FEAT_PAD_MODE     0x1D
 #define FEAT_SHIFT        0x3F
 #define CTL_SHIFT         25
+#define CTL_PLAY          0x48
 #define FEAT_KEYS_CHANNEL 0x64        /* Settings > Keys Channel, 0-based */
 #define PAD_CUSTOM4       8
 
@@ -386,6 +388,8 @@ static int ctl_slot(uint32_t id)
         return (int)id;
     if (id >= ENC_FIRST && id < ENC_FIRST + ENC_COUNT)
         return (int)(PAD_COUNT + id - ENC_FIRST);
+    if (id == CTL_PLAY)
+        return PAD_COUNT + ENC_COUNT;
     return -1;
 }
 
@@ -445,10 +449,13 @@ int tm_io_event(int list, uint32_t id, uint32_t value)
     }
     uint32_t bit = 1u << slot;
     if (list == 0) {            /* the press decides who owns the control until its release */
-        int take = st.active && !st.shift && !menu_owns(id);
+        /* buttons are always captured by the UI, so Play does not ask menu_owns */
+        int take = st.active && !st.shift && (id == CTL_PLAY || !menu_owns(id));
         st.owned = take ? st.owned | bit : st.owned & ~bit;
         if (take && id < PAD_COUNT)
             pad_pressed(id);
+        else if (take && id == CTL_PLAY)
+            set_playing(!st.playing);
     }
     if (!(st.owned & bit))
         return TM_PASS;
@@ -457,7 +464,7 @@ int tm_io_event(int list, uint32_t id, uint32_t value)
         if (id < PAD_COUNT)
             pad_released(id);
     }
-    return id < PAD_COUNT ? TM_CONSUME : TM_ENC_ONLY;
+    return id < PAD_COUNT || id == CTL_PLAY ? TM_CONSUME : TM_ENC_ONLY;
 }
 
 /* list: 0 = pos (every tick), 1 = hires, 2 = step (per detent). Returns 1 if consumed. */

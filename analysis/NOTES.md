@@ -32,8 +32,9 @@
 - RAM (64 KiB): RW data 0x20000000..0x200015D0 (decompressed from the image end), zero-init
   0x200015D0..0x2000F518 (scatter table @0x08033544), leaves **2 792 bytes** up to 0x20010000 for the main stack
   (initial SP 0x2000FFF8). Any new feature must find RAM inside existing buffers or share that headroom.
-- cfw RAM: 0x2000F520..0x2000F6A0 (`cfw/cfw.ld`, 384 bytes, 304 used). It was 256 bytes up to 0x2000F620
-  when the stack was measured (see "Stack" below), so the untouched stack area is now >= 1344 bytes.
+- cfw RAM: 0x2000F520..0x2000F860 (`cfw/cfw.ld`, 832 bytes, 828 used; 576 of them are the three step
+  sequences). It was 256 bytes up to 0x2000F620 when the stack was measured (see "Stack" below), so the
+  untouched stack area is now >= 896 bytes. More sequencer steps cost stack margin: 4 bytes per step.
 
 ## Modes and layouts (fw 1563)
 
@@ -71,6 +72,10 @@
   Each ms the accumulator gains 1000 us; reaching the period increments the counter (internal), or each
   pending F8 does (external). Free-running. MIDI Clock Out (`clock_out_poll` @0x08014492, main loop) sends
   one F8 per counter step -> cfw steps from the same counter in cfw_poll.
+  External sync is automatic: the first pending F8 switches to external (0x08013BD6, resets the tempo
+  filters), 250 ms without F8 (0x3D08F us @0x08013E2C) switch back to the internal tempo. F8 / FA / FB / FC
+  are taken from both USB ports (`midi_rx_realtime`); after realtime on the DAW port, realtime on the MIDI
+  port is ignored for 0.5 s (flag 0x2000F50B, 0x080309BA). FA / FB set, FC clears the running flag (+0).
 - Stack: >= 1472 bytes of the painted area (0x2000F620..) never touched -> peak stack use ~1 KB.
 - `ctl_block(id)` @0x08016038 / `ctl_unblock` @0x08016048 / `ctl_is_blocked` @0x08016058: per-control flag
   (table 0x2000C410) that makes the app listeners ignore the control; ui_menumgr uses it to capture controls
@@ -138,6 +143,8 @@
 - Notes: MIDI port (g_app_ports[1]) on the Keys Channel (0x64), velocity 100. **DIN/TRS out:** main() inits a
   third port (stack sp+0x50, raw-byte mode, serial ring -> USART6 @31250 baud via DMA) and links it to the MIDI
   port (`port+0x18`, `0x08013EE8`); `midi_send3` walks that chain, so MIDI-port notes also go out on DIN.
+- Play (0x48) is play/pause too: taken in `tm_io_event` while the mode is active and Shift is up (without
+  the menu check: buttons are always captured by the UI), so its stock MIDI Start / Stop is not sent.
 - **Persistence:** feature params 0x50 prob, 0x51 length, 0x52 rate, 0x5A octave, 0x5B range, 0x5D gate,
   0x5E trigger heads, 0x5F note mask (7 bits), 0x60 marker (0x5A), defined with flags 3 in cfw_init. Marker
   missing (first boot / older settings record) -> defaults are stored. Ids 0x20..0x3F avoided: they alias the
@@ -210,21 +217,30 @@ Static analysis for the step sequencer; nothing in this section is confirmed on 
   MIDI, Quantise, Metronome, Undo), 0x48 = CC 115 Play, 0x49 = 116 Stop, 0x4A = 117 Record, 0x4B = 118 Loop.
   Record is identified by this table only.
 
-## Step sequencer (cfw, pad mode Custom 3)
+## Step sequencers (cfw, pad modes Custom 1, 2 and 3)
 
-- `cfw/seq_mode.c` + `cfw/seq_core.c` (host tests `cfw/test/test_seq_core.c`, `test_seq_mode.c`). Active
-  while feature 0x1D = 7. One byte per step (note, 0x80 rest, 0x81 tie), max 100 steps, RAM only.
-- Record (0x4A) and Play (0x48) are consumed in the io dispatchers while the mode is active and Shift is up;
-  Oct - / Oct + (0x20 / 0x21) only with Shift while recording (rest / tie). Pads are consumed (no function).
-- Key notes: `seq_io_event` marks a key press (id >= 0x80) while recording, the note-out listener
-  `seq_note_out` stores the first note that follows (so a chord is one step). Keys that do not sound
-  directly (Arp on) record nothing.
-- Clock: `cfw_midi_rx` passes note on / off of note 24 on the MIDI port to `seq_midi_rx` while the mode is
-  active (the note is swallowed then); note on = next step, note off = gate end unless the next step is a
-  tie. Notes go out with `midi_send3` on g_app_ports[1] on the Keys Channel, velocity 100.
+- `cfw/seq_mode.c` + `cfw/seq_core.c` (host tests `cfw/test/test_seq_core.c`, `test_seq_mode.c`). Three
+  instances of the core, 4 voices and 48 steps each (4 bytes per step: note / 0x80 rest / 0x81 tie, further
+  slots note or 0xFF), RAM only. Instance n (1..3) = feature 0x1D value 4 + n (pad Custom 1..3) = MIDI channel n.
+- The pad mode only selects the instance the controls, keys and pads belong to (`seq`); playback of all
+  instances goes on whatever pad mode is selected. Leaving a pad mode ends that instance's recording.
+- Record (0x4A, with and without Shift) and Play (0x48, Shift up) are consumed in the io dispatchers while a
+  sequencer pad mode is selected; Oct - / Oct + (0x20 / 0x21) only with Shift while recording (rest / tie).
+  Record keeps the sequence and records from step 1 (`rec`), overwriting; Shift + Record = `seq_clear`.
+  Pads are consumed; while recording a pad moves the record position (`seq_record_seek`, steps 0..len on
+  the page shown).
+- Chords: `seq_io_event` counts the keys held (ids >= 0x80); the note-out listener `seq_note_out` stores a
+  key's note as a new step, or adds it to the last step while another key is still down
+  (`seq_record_add_note`). A button or pad press ends the chord. Keys that do not sound directly (Arp on)
+  record nothing.
+- Clock: `cfw_midi_rx` passes note on / off of note 24 on the MIDI port to `seq_midi_rx`; on channel n it
+  clocks instance n if that is playing (the note is swallowed then, otherwise it goes to the stock handler).
+  Note on = next step, note off = gate end unless the next step is a tie. Notes go out with `midi_send3` on
+  g_app_ports[1] on channel n, velocity 100. While the selected instance plays, `seq_note_out` treats note
+  24 from a key (ctl >= 0x80; value 0 = release, any Keys Channel) as its clock.
 - The listener and the MIDI handler only change state; pads (LED override layer) and the popup are drawn
-  from `seq_mode_poll` in the main loop. cfw_init registers one feature listener for both modes
-  (`feat_changed`) to save a slot. **Status: built, host-tested, not yet tested on hardware.**
+  from `seq_mode_poll` in the main loop for the selected instance. cfw_init registers one feature listener
+  for both modes (`feat_changed`) to save a slot. **Status: built, host-tested, not yet tested on hardware.**
 
 ## Patches
 

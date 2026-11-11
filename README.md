@@ -5,7 +5,8 @@ firmware version 1.3 build 1563. It adds:
 
 - **Turing Machine mode** – a generative sequencer inspired by the Music Thing Turing Machine, on pad mode
   Custom 4
-- **Step sequencer** – an SH-101 style step sequencer on pad mode Custom 3, clocked by a MIDI note
+- **Step sequencers** – three SH-101 style step sequencers (up to four notes per step) on pad modes
+  Custom 1, 2 and 3, on MIDI channels 1, 2 and 3, each clocked by a MIDI note
 - **CC pages** – encoder mode Custom 1 has 12 pages of 8 CCs (CC 20–115) instead of 2
 - **Scale memory** – the scale (on/off, type, root note, mode) is restored at power-on
 - A **CFW badge** on the boot logo, and the version shown at boot gets a `+cfw` suffix
@@ -28,6 +29,7 @@ value picks a note from the current scale, and trigger heads decide whether a st
 | Pad | Function |
 |---|---|
 | Top row, pad 1 (yellow) | **Play / pause.** Also shows register bit 1 (bright = 1, dim = 0). |
+| **Play** button | **Play / pause** as well. It does not send its usual MIDI Start / Stop in this mode. |
 | Top row, pads 2–8 (green) | Register bits 2–8, moving one pad to the right per step. Dark = beyond the loop length. |
 | Bottom row, pads 1–7 (white) | **Scale notes** (pad 1 = root). Press to switch a note on (bright) or off (dim). A disabled note is replaced by the closest enabled note. With Scale off all pads are lit and all 12 semitones are used. |
 | Bottom row, pad 8 (pink) | **Hold.** While held, the top row stops moving on screen (the sequence keeps running) and pressing a top pad **flips that bit**; pad 1 turns green then. |
@@ -59,39 +61,57 @@ Turning an encoder shows its value on the display.
 
 ---
 
-## Step sequencer (pad mode Custom 3)
+## Step sequencers (pad modes Custom 1, 2 and 3)
 
 > **Not yet tested on hardware.** Built and host-tested (`make cfw-test`) only.
 
-An SH-101 style step sequencer: notes are entered one step at a time and played back one step
-per clock. Select pad mode **Custom 3** (hold Shift and press the 7th pad of the bottom row).
+Three independent SH-101 style step sequencers: notes are entered one step at a time and played
+back one step per clock. Each has its own sequence of up to **48 steps** with up to **4 notes
+per step**.
+
+| Pad mode | Select with | Sequencer | MIDI channel (notes out and clock in) |
+| --- | --- | --- | --- |
+| Custom 1 | Shift + 5th pad of the bottom row | 1 | 1 |
+| Custom 2 | Shift + 6th pad of the bottom row | 2 | 2 |
+| Custom 3 | Shift + 7th pad of the bottom row | 3 | 3 |
+
+The pad mode chooses which sequencer the buttons, keys and pads belong to. A sequencer that is
+playing **keeps playing in the background** when you select another pad mode (also Custom 4,
+Drum or DAW), so all three can run at once.
 
 | Control | Function |
 | --- | --- |
-| **Record** | Start recording (the old sequence is cleared). Press again to finish. |
-| **Keys** | While recording: every key press stores its note as the next step. |
+| **Record** | Start recording at step 1. The sequence is kept: what you enter replaces its steps, and makes it longer once you pass its end. Press again to finish. |
+| **Shift + Record** | **Reset:** empty the sequence. |
+| **Keys** | While recording: every key press stores its note as the next step. Keys pressed while another key is still held join the same step as a chord (up to 4 notes); the next step starts once all keys are released, so let go between steps. |
 | **Shift + Oct −** | While recording: store a **rest**. |
-| **Shift + Oct +** | While recording: store a **tie** (the previous note keeps sounding). |
+| **Shift + Oct +** | While recording: store a **tie** (the previous notes keep sounding). |
+| **Pads** | While recording: press a pad to continue recording **from that step**, e.g. to change single notes. Any step of the sequence or the first free step after it can be chosen. |
 | **Play** | Start / stop playback. Playback always starts at step 1. |
 
-- **Length:** the sequence is as long as the steps entered, up to 100. Recording ends by itself
-  when the memory is full.
-- **Clock:** send MIDI note **C0 (note number 24, middle C = C3)** on any channel to the
-  Launchkey's **MIDI port** over USB (the first port, not the DAW port). Every note on advances
-  one step; the note off ends the note, so the clock's gate length is the sequence's gate
-  length. Nothing plays without that clock.
+- **Length:** the sequence is as long as the steps entered. To make it shorter, reset it with
+  Shift + Record and enter it again. A step that does not fit any more ends the recording.
+- **Clock:** MIDI note **C0 (note number 24, middle C = C3)**. Every note on advances one step;
+  the note off ends the notes, so the clock's gate length is the sequence's gate length. Nothing
+  plays without that clock. It can come from two places:
+  - over USB, sent to the Launchkey's **MIDI port** (the first port, not the DAW port) on the
+    sequencer's channel: C0 on channel 1 steps sequencer 1, on channel 2 sequencer 2, on
+    channel 3 sequencer 3, whatever pad mode is selected, or
+  - from the **keys**: while the sequencer of the selected pad mode is playing, pressing the
+    key that plays C0 steps it (use the Octave buttons to reach it). That key also sounds its
+    own C0.
 - **Pads:** the 16 pads show 16 steps (top row 1–8, bottom row 9–16) and follow the current
   step in pages of 16. Green = note, blue = rest, amber = tie; the playing step is bright, and
-  while recording the next free step is red. The pads have no function when pressed.
-- **Notes** go out on the **Keys Channel** (Settings) via USB MIDI and the TRS MIDI out,
-  velocity 100. A chord entered with one key press stores its first note.
-- The sequence is kept while the device is on, also when you change the pad mode; leaving
-  Custom 3 stops playback and recording. It is **not saved** at power-off.
-- In this mode Play and Record do not send their usual MIDI messages. Shift + Play / Record,
-  Shift + pads (mode selection) and the plain Octave buttons work as usual; Shift + Oct −/+ is
-  Transpose again whenever you are not recording.
-- The clock note, velocity and maximum length are constants at the top of `cfw/seq_mode.c`
-  and `cfw/seq_core.h`.
+  while recording the step the next entry goes to is red. A pad selects a step on the page
+  shown; to reach a later page, enter steps (or ties) until the page changes.
+- **Notes** go out on the sequencer's channel via USB MIDI and the TRS MIDI out, velocity 100.
+- The sequences are kept while the device is on. Leaving a sequencer's pad mode ends its
+  recording. They are **not saved** at power-off.
+- In these modes Play and Record do not send their usual MIDI messages, and Shift + Record
+  loses its usual function. Shift + Play, Shift + pads (mode selection) and the plain Octave
+  buttons work as usual; Shift + Oct −/+ is Transpose again whenever you are not recording.
+- Pad mode Custom 1 is no longer available as a custom pad layout.
+- The clock note, velocity and number of steps are constants at the top of `cfw/seq_mode.c`.
 
 ---
 
