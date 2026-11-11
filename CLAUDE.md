@@ -32,6 +32,8 @@ details belong here and in `analysis/NOTES.md`.
   `cfw/cfw_init.c`); behaviour, persistence ids and integration details: NOTES "Turing Machine mode" and
   "Modes and layouts". A SysEx debug probe (`cfw/probe.c`, `tools/probe_listen.py`) existed until commit
   350285f – restore it from git when hardware debugging needs event logs.
+- CC pages = encoder mode Custom 1 with 12 pages of CCs (`cfw/cc_pages.c`, host test `cfw/test/test_cc_pages.c`);
+  stock page handling and the three hooks: NOTES "Encoder pages".
 
 ## Container format (verified: round-trip byte-identical, CRC matches)
 

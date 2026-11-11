@@ -19,3 +19,8 @@
 0x08020e48  b.w cfw_relin_dispatch_pos   2de9f041   # was: push.w {r4-r8,lr}
 0x08020e56  b.w cfw_relin_dispatch_hires 2de9f041
 0x08020e8a  b.w cfw_relin_dispatch_step  2de9f041
+
+# encoder pages: Custom 1 gets 12 pages of CCs (cfw/cc_pages.c)
+0x0801cba6  b.w cfw_enc_page_count 10b1801f   # was: cbz r0,...; subs r0,r0,#6 (enc_page_count, whole function replaced)
+0x080235d2  bl  cfw_enc_set_page   f9f7b2fa   # was: bl enc_set_page (up/down handler)
+0x080235d8  bl  cfw_enc_page_popup fff7effe   # was: bl ui_show_enc_page (up/down handler)

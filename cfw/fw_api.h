@@ -105,4 +105,17 @@ void led_override(uint32_t id, uint32_t mode);
  * the main loop and step on the difference, like the MIDI Clock Out sender (0x08014492). */
 extern volatile uint32_t g_clock_ticks;
 
+/* Encoder layouts and pages (see NOTES "Encoder pages"). g_enc_layout: 2..5 = Plugin, Mixer,
+ * Sends, Transport, 6..9 = Custom 1..4. g_enc_page[n] = page of Custom n+1 (stock: 0 or 1). */
+extern uint32_t g_enc_layout;
+extern uint32_t g_enc_page[4];
+/* Stores the page (limited to 1) and re-assigns the encoders if it changed. */
+void enc_set_page(uint32_t layout, uint32_t page);
+/* Re-assigns the encoder controls for the current layout and page. */
+void enc_assign_refresh(void);
+/* Popup "Custom Controls" / "1 - 8" or "9 - 16", then ui_refresh_nav_leds. */
+void ui_show_enc_page(uint32_t page);
+/* Redraws the LEDs of the navigation buttons (pad and encoder up/down). */
+void ui_refresh_nav_leds(void);
+
 #endif

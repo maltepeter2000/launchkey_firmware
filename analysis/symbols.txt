@@ -96,3 +96,20 @@
 0x08014492 clock_out_poll
 0x20000104 g_clock                       data
 0x20000124 g_clock_ticks                 data
+
+# --- encoder layouts / pages (see NOTES.md "Encoder pages") ---
+0x0801c760 enc_page_ctl
+0x0801c7ae enc_assign_custom
+0x0801c8c4 enc_assign_refresh
+0x0801cac0 enc_set_layout
+0x0801cb3a enc_set_page
+0x0801cb7a enc_get_page
+0x0801cba6 enc_page_count
+0x0801e1aa ctl_map_get
+0x0801e1b8 ctl_map_set
+0x080231ca ui_refresh_nav_leds
+0x080233ba ui_show_enc_page
+0x08023436 ui_nav_button
+0x20002d1c g_ctl_map                     data
+0x2000f39c g_enc_page                    data
+0x2000f4e8 g_enc_layout                  data

@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "fw_api.h"
 #include "tm_mode.h"
+#include "cc_pages.h"
 
 extern uint32_t __cfw_bss_start[], __cfw_bss_end[];
 
@@ -35,6 +36,18 @@ uint32_t cfw_boot_version(char *buf, uint32_t pos, uint32_t size, const uint32_t
 
 /* ---- input dispatchers: replace the stock ones (see cfw/hooks.txt) ---- */
 
+/* Turing Machine mode first; what it passes on may belong to the CC pages (cc_pages.c). */
+static int io_event(int list, uint32_t id, uint32_t v)
+{
+    int r = tm_io_event(list, id, v);
+    return r == TM_PASS ? ccp_io_event(list, id) : r;
+}
+
+static int enc_event(int list, uint32_t id, int32_t d)
+{
+    return tm_enc_event(list, id, d) || ccp_enc_event(list, id, d);
+}
+
 typedef void (*io2_fn)(uint32_t, uint32_t);
 typedef void (*io1_fn)(uint32_t);
 
@@ -46,7 +59,7 @@ static void call_list2(const io_list_t *l, uint32_t id, uint32_t v)
 
 void cfw_io_dispatch_a(uint32_t id, uint32_t v)
 {
-    int r = tm_io_event(0, id, v);
+    int r = io_event(0, id, v);
     if (r == TM_PASS)
         call_list2(&g_io_list_a, id, v);
     else if (r == TM_ENC_ONLY)
@@ -55,13 +68,13 @@ void cfw_io_dispatch_a(uint32_t id, uint32_t v)
 
 void cfw_io_dispatch_b(uint32_t id, uint32_t v)
 {
-    if (tm_io_event(1, id, v) == TM_PASS)
+    if (io_event(1, id, v) == TM_PASS)
         call_list2(&g_io_list_b, id, v);
 }
 
 void cfw_io_dispatch_d(uint32_t id, uint32_t v)
 {
-    int r = tm_io_event(3, id, v);
+    int r = io_event(3, id, v);
     if (r == TM_PASS)
         call_list2(&g_io_list_d, id, v);
     else if (r == TM_ENC_ONLY)
@@ -70,7 +83,7 @@ void cfw_io_dispatch_d(uint32_t id, uint32_t v)
 
 void cfw_io_dispatch_c(uint32_t id)
 {
-    int r = tm_io_event(2, id, 0);
+    int r = io_event(2, id, 0);
     if (r == TM_ENC_ONLY) {
         relin_io_listener_c(id);
     } else if (r == TM_PASS) {
@@ -87,18 +100,18 @@ static void call_list3(const io_list_t *l, uint32_t id, uint32_t v, int32_t d)
 
 void cfw_relin_dispatch_pos(uint32_t id, uint32_t v, int32_t d)
 {
-    if (!tm_enc_event(0, id, d))
+    if (!enc_event(0, id, d))
         call_list3(&g_relin_list_pos, id, v, d);
 }
 
 void cfw_relin_dispatch_hires(uint32_t id, uint32_t v, int32_t d)
 {
-    if (!tm_enc_event(1, id, d))
+    if (!enc_event(1, id, d))
         call_list3(&g_relin_list_hires, id, v, d);
 }
 
 void cfw_relin_dispatch_step(uint32_t id, uint32_t v, int32_t d)
 {
-    if (!tm_enc_event(2, id, d))
+    if (!enc_event(2, id, d))
         call_list3(&g_relin_list_step, id, v, d);
 }

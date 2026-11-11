@@ -141,6 +141,30 @@
   missing (first boot / older settings record) -> defaults are stored. Ids 0x20..0x3F avoided: they alias the
   LSBs of 14-bit params 0x00..0x1F.
 
+## Encoder pages (fw 1563)
+
+- `g_enc_layout` @0x2000F4E8 = current encoder layout (2..5 Plugin/Mixer/Sends/Transport, 6..9 Custom 1..4),
+  written by `enc_set_layout` @0x0801CAC0 (0 is stored as 6). `enc_assign_refresh` @0x0801C8C4 switches on it
+  (tbb @0x0801C8E0, layouts 6..9 -> 0x0801C8F0) and assigns the 8 encoders: custom layouts load each control
+  from the custom-mode data through `enc_assign_custom` @0x0801C7AE; `enc_page_ctl` @0x0801C760 maps encoder
+  ids 0x38..0x3F to 0x68..0x6F when the page is not 0 (= controls 9..16 of the Components layout).
+- Page per custom layout: `g_enc_page[4]` @0x2000F39C (u32 each, RAM only). `enc_get_page(layout)` @0x0801CB7A,
+  `enc_set_page(layout, page)` @0x0801CB3A (limits to 1, stores, refreshes), `enc_page_count(layout)`
+  @0x0801CBA6 (2 for layouts 0 and 6..9, else 1).
+- Up/down buttons next to the encoders = controls **0x25 (up, page - 1)** and **0x24 (down, page + 1)**.
+  Handler `ui_nav_button` @0x08023436, page part from 0x080235A2: get page, check against enc_page_count,
+  `enc_set_page`, then `ui_show_enc_page(page)` @0x080233BA (popup string 0x3F "Custom Controls" + string
+  0x40 + page: "1 - 8" / "9 - 16") which ends in `ui_refresh_nav_leds` @0x080231CA (up lit if page > 0, down lit
+  if page < count - 1). In the non-custom layouts the two buttons are ordinary mapped controls (0x080233E2).
+- Control mappings: table `g_ctl_map` @0x20002D1C, 20 bytes per control id (+0 number, +2 min, +4 max, +0xE
+  type; type 2 looks like a plain CC 0..127, see 0x0801C7F6), `ctl_map_get(id)` @0x0801E1AA,
+  `ctl_map_set(id, map)` @0x0801E1B8. Static analysis only: the value of an encoder seems to be kept per
+  physical control, not per page (0x08015BBE rescales it when a mapping changes).
+- **cfw CC pages** (`cfw/cc_pages.c`, Custom 1 only): hooks replace enc_page_count (12 pages), the enc_set_page
+  call and the ui_show_enc_page call in the handler; encoder turns are taken in the relin dispatchers (after
+  the Turing Machine mode) and sent as CC 20 + page * 8 + encoder on channel 1 with `midi_send3`. Values:
+  96 bytes of cfw RAM. **Status: built, host-tested (`make cfw-test`), not yet tested on hardware.**
+
 ## Patches
 
 - `010-boot-logo.patch` – generated from `assets/boot_logo.txt`: adds an inverted "CFW" badge right of the

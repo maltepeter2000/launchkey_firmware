@@ -59,3 +59,11 @@ PROVIDE(ctl_is_blocked     = 0x08016058 | 1);
 PROVIDE(relin_io_listener_a = 0x08020E97);
 PROVIDE(relin_io_listener_c = 0x08020EBB);
 PROVIDE(relin_io_listener_d = 0x08020EDB);
+
+/* encoder layouts / pages (cc_pages.c) */
+PROVIDE(g_enc_layout        = 0x2000F4E8);
+PROVIDE(g_enc_page          = 0x2000F39C);
+PROVIDE(enc_set_page        = 0x0801CB3A | 1);
+PROVIDE(enc_assign_refresh  = 0x0801C8C4 | 1);
+PROVIDE(ui_show_enc_page    = 0x080233BA | 1);
+PROVIDE(ui_refresh_nav_leds = 0x080231CA | 1);

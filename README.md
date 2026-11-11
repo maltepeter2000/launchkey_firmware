@@ -5,6 +5,7 @@ firmware version 1.3 build 1563. It adds:
 
 - **Turing Machine mode** – a generative sequencer inspired by the Music Thing Turing Machine, on pad mode
   Custom 4
+- **CC pages** – encoder mode Custom 1 has 12 pages of 8 CCs (CC 20–115) instead of 2
 - **Scale memory** – the scale (on/off, type, root note, mode) is restored at power-on
 - A **CFW badge** on the boot logo, and the version shown at boot gets a `+cfw` suffix
 
@@ -54,6 +55,35 @@ Turning an encoder shows its value on the display.
 - **Shift still works:** Shift + pads selects pad and encoder modes as usual, and menus (Settings, Scale, Arp)
   get the encoders while they are open. If a Scale or Arp screen keeps the encoders, select pad Custom 4 again.
 - The 8th note of 8-note scales (Half-Whole Dim, Whole-Half Dim, 8-tone Spanish) is always on.
+
+---
+
+## CC pages (encoder mode Custom 1)
+
+> **Not yet tested on hardware.** Built and host-tested (`make cfw-test`) only.
+
+Select encoder mode **Custom 1** as usual (hold Shift and press the 5th pad of the top row). The
+**up / down buttons** next to the encoders step through **12 pages** instead of 2; the display
+shows the page and its CCs, and the button LEDs show whether there is a page above or below.
+
+| Page | Encoders 1–8 send |
+| --- | --- |
+| 1 | CC 20–27 |
+| 2 | CC 28–35 |
+| 3 | CC 36–43 |
+| … | … |
+| 12 | CC 108–115 |
+
+- Values are absolute (0–127) on **MIDI channel 1**, via USB MIDI and the TRS MIDI out. Turning
+  an encoder shows page, CC number and value.
+- **Every page remembers its eight values**, so there are no jumps after changing the page. The
+  values start at 0 after power-on and are not updated by incoming MIDI.
+- The assignments made for Custom 1 in Novation Components are not used while this firmware is
+  installed. Custom 2–4 and all other encoder modes work as before (2 pages).
+- Number of pages, first CC, channel and step size are the `CCP_*` constants at the top of
+  `cfw/cc_pages.c`.
+- In pad mode Custom 4 (Turing Machine) encoders 1–7 belong to the Turing Machine; only
+  encoder 8 sends the CC of the current page.
 
 ---
 
