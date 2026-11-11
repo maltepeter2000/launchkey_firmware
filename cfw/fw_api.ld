@@ -67,3 +67,7 @@ PROVIDE(enc_set_page        = 0x0801CB3A | 1);
 PROVIDE(enc_assign_refresh  = 0x0801C8C4 | 1);
 PROVIDE(ui_show_enc_page    = 0x080233BA | 1);
 PROVIDE(ui_refresh_nav_leds = 0x080231CA | 1);
+
+/* MIDI in / note-out listeners (seq_mode.c) */
+PROVIDE(midi_port_rx_notes      = 0x080317AA | 1);
+PROVIDE(inmidi_add_out_listener = 0x08020D94 | 1);

@@ -23,7 +23,7 @@
       0x7C header version is just stored in the update state (0x0801B92C), not compared. Patched builds put the
       patch count in field 4 (see apply_patches.py).
 - [x] Does the bootloader accept an image larger than the original (code-cave growth)? Yes (see above).
-- [ ] MIDI input dispatch / SysEx handler (entry point for new functions).
+- [x] MIDI input dispatch / SysEx handler: see "MIDI input, keys and buttons".
 - [ ] Recovery: bootloader mode button combo, in case a patched image doesn't boot.
 
 ## Memory budget (fw 1563)
@@ -32,6 +32,8 @@
 - RAM (64 KiB): RW data 0x20000000..0x200015D0 (decompressed from the image end), zero-init
   0x200015D0..0x2000F518 (scatter table @0x08033544), leaves **2 792 bytes** up to 0x20010000 for the main stack
   (initial SP 0x2000FFF8). Any new feature must find RAM inside existing buffers or share that headroom.
+- cfw RAM: 0x2000F520..0x2000F6A0 (`cfw/cfw.ld`, 384 bytes, 304 used). It was 256 bytes up to 0x2000F620
+  when the stack was measured (see "Stack" below), so the untouched stack area is now >= 1344 bytes.
 
 ## Modes and layouts (fw 1563)
 
@@ -164,6 +166,65 @@
   call and the ui_show_enc_page call in the handler; encoder turns are taken in the relin dispatchers (after
   the Turing Machine mode) and sent as CC 20 + page * 8 + encoder on channel 1 with `midi_send3`. Values:
   96 bytes of cfw RAM. **Status: built, host-tested (`make cfw-test`), not yet tested on hardware.**
+
+## MIDI input, keys and buttons (fw 1563)
+
+Static analysis for the step sequencer; nothing in this section is confirmed on hardware yet.
+
+- **USB MIDI in:** `midi_rx_poll(parser, ring)` @0x08014418 runs in the main loop (called at 0x080104C4),
+  feeds USB-MIDI packets to `usbmidi_rx_packet` @0x0801431C / bytes to `midi_rx_byte` @0x0801424A. main()
+  registers per USB cable a message handler, a SysEx handler and the port as context (0x0801412A):
+  cable 0 = **MIDI port**: `midi_port_rx_msg(port, status, d1, d2)` @0x0803048C, SysEx @0x080304C6;
+  cable 1 = DAW port: `daw_port_rx_msg` @0x080302F6, SysEx `port_rx_sysex` @0x08030342 (chain of ~25
+  handlers, each returns 1 when it took the message; the firmware updater 0x08030E00 is one of them).
+- `midi_port_rx_msg`: optional echo (0x080302D0), then `midi_port_rx_notes` @0x080317AA (note on/off, CC,
+  PC -> confsys params group = channel / 0x10 | channel / 0x40 | channel, i.e. the note and CC state the LEDs
+  follow), then `midi_rx_realtime` @0x08030958 (F8 -> clock_ext_tick, FA/FB/FC). **cfw hook:** the
+  `bl midi_port_rx_notes` at 0x0803049A -> `cfw_midi_rx` (clock note of the step sequencer).
+- **Keys = control ids 0x80..0xFF** (key index + 0x80), scanned by `keybed_scan` @0x0801AB5E, which calls the
+  io dispatchers like the other scanners: A(id, 16-bit velocity) on press, C(id) on release, B(id, pressure).
+  `io_poll` @0x08014502 runs six scanners: generic 0x0801A71C (ids 0..0x7F by type from
+  `g_ctl_scan_types` @0x0803217C), keys, pads 0x0801AD5E, faders 0x0801AFFC, touch strips 0x0801B1D8
+  (ids 0x36 / 0x37), pedal 0x0801B39A (0x78 / 0x79). `ctl_info(id)` @0x0801DFA4 reads `g_ctl_types`
+  @0x0802FED0 (ids < 0x80: 1 pad, 2 relative, 3 fader, 4 button, 5 touch strip, 6 pedal).
+- **Control -> MIDI:** io listener A `ctl_press` @0x08015C6C copies the 20-byte map (`g_ctl_map`, 256 entries)
+  into one of 16 slots, runs the press chain `inmidi_press_chain` @0x08020CBA (inputmidi_listener.cpp: up to
+  8 {press, ?, release} handlers at 0x2000E7DC, registered with 0x08020DCE; ui_menumgr, scale, chord, arp
+  consume here) and then the output functions (0x08015C38). Notes: `ctl_out_note` @0x0801FBD2 sets the
+  confsys param (group = channel, id = note, value = velocity) and calls
+  `inmidi_out_notify(ctl, group, number, value)` @0x08020C4C -> **note-out listeners** at 0x2000EFB8 (max 8,
+  count at +0x20, `inmidi_add_out_listener` @0x08020D94; 1 used by the UI @0x08016530, which treats
+  group < 0x10 with value != 0 as a note on). Releases notify with value 0 (0x0801FB64).
+  `note_on(channel, note, velocity14, source)` @0x0801FE0A / `note_off` @0x0801FE66 are used by the timed
+  sources (0x080165A8 with `layout_channel(2)` @0x08025878, strum 0x0802C184) and do not notify.
+- **Buttons** (type 4) are captured by ui_menumgr: its press handler 0x080255A8 (in the press chain) passes
+  `ui_shifted_id(id)` @0x0801BDC8 to `ui_button_press` @0x080163E0 / `ui_button_release` @0x0801645E, which
+  call every UI module. With Shift (state at 0x2000F506) ids are translated by `g_shift_id_table`
+  @0x080300D0: 0x20 -> 0x64, 0x21 -> 0x65, 0x22 -> 0x63, 0x23 -> 0x62, 0x40 -> 0x66, 0x41 -> 0x67,
+  0x42 -> 0x12, 0x43 -> 0x13, 0x1C -> 0x1E, 0x1E -> 0x60, 0x1F -> 0x61. The io dispatchers see the raw ids.
+- **Button ids:** 0x20 / 0x21 = **Octave - / +** (`ui_octave_press` @0x08021300; 0x64 / 0x65 = Transpose),
+  0x22 / 0x23 = pad up / down, 0x24 / 0x25 = encoder down / up, 0x10 / 0x11 = the two buttons next to the
+  pads, 0x19 = Shift, **0x48 = Play** (0x08022710 sends MIDI Start FA / Stop FC), **0x4A = Record**.
+  `g_button_cc_table` @0x0803227C (12 {id, CC} pairs, DAW mapping; +0x60 and +0xC0 are the tables of the
+  other two DAW modes): 0x40 / 0x41 = track right / left (CC 103 / 102), 0x44..0x47 = CC 74..77 (Capture
+  MIDI, Quantise, Metronome, Undo), 0x48 = CC 115 Play, 0x49 = 116 Stop, 0x4A = 117 Record, 0x4B = 118 Loop.
+  Record is identified by this table only.
+
+## Step sequencer (cfw, pad mode Custom 3)
+
+- `cfw/seq_mode.c` + `cfw/seq_core.c` (host tests `cfw/test/test_seq_core.c`, `test_seq_mode.c`). Active
+  while feature 0x1D = 7. One byte per step (note, 0x80 rest, 0x81 tie), max 100 steps, RAM only.
+- Record (0x4A) and Play (0x48) are consumed in the io dispatchers while the mode is active and Shift is up;
+  Oct - / Oct + (0x20 / 0x21) only with Shift while recording (rest / tie). Pads are consumed (no function).
+- Key notes: `seq_io_event` marks a key press (id >= 0x80) while recording, the note-out listener
+  `seq_note_out` stores the first note that follows (so a chord is one step). Keys that do not sound
+  directly (Arp on) record nothing.
+- Clock: `cfw_midi_rx` passes note on / off of note 24 on the MIDI port to `seq_midi_rx` while the mode is
+  active (the note is swallowed then); note on = next step, note off = gate end unless the next step is a
+  tie. Notes go out with `midi_send3` on g_app_ports[1] on the Keys Channel, velocity 100.
+- The listener and the MIDI handler only change state; pads (LED override layer) and the popup are drawn
+  from `seq_mode_poll` in the main loop. cfw_init registers one feature listener for both modes
+  (`feat_changed`) to save a slot. **Status: built, host-tested, not yet tested on hardware.**
 
 ## Patches
 

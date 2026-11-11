@@ -23,15 +23,18 @@ details belong here and in `analysis/NOTES.md`.
   Prints the file's version and which `patches/*.patch` are present in the image (checked byte-wise).
 - `tools/bitmap.py` – `list` / `export <id>` / `patch <id> art.txt [--title]` for OLED images (image table
   `g_image_table` 0x0802DF94); `assets/boot_logo.txt` (image 0x27F) -> `patches/010-boot-logo.patch` via make.
-- `cfw/` – C code for the free flash after the image (`cfw/cfw.ld`: code from 0x080372B4, 256 B RAM @0x2000F520,
+- `cfw/` – C code for the free flash after the image (`cfw/cfw.ld`: code from 0x080372B4, 384 B RAM @0x2000F520,
   no initialised .data, cfw_init zeroes .bss). Firmware functions: `cfw/fw_api.h` + `cfw/fw_api.ld`; hook sites:
   `cfw/hooks.txt` (`<addr> bl|b.w <symbol> <orig hex>`). `make cfw` (xcrun clang + Homebrew `ld.lld`) ->
   `tools/mkcave.py` -> `patches/100-cfw-code.patch`, `patches/101-cfw-hooks.patch`. `make cfw-test` runs the
-  host unit tests (`cfw/test/`) of the pure logic in `cfw/tm_core.c`.
+  host unit tests (`cfw/test/`).
 - Turing Machine mode = pad mode Custom 4 (`cfw/tm_mode.c`, `cfw/tm_core.c`, input dispatchers in
   `cfw/cfw_init.c`); behaviour, persistence ids and integration details: NOTES "Turing Machine mode" and
   "Modes and layouts". A SysEx debug probe (`cfw/probe.c`, `tools/probe_listen.py`) existed until commit
   350285f – restore it from git when hardware debugging needs event logs.
+- Step sequencer = pad mode Custom 3 (`cfw/seq_mode.c`, `cfw/seq_core.c`, host tests `cfw/test/test_seq_*.c`):
+  SH-101 style step entry (Record, keys, Shift + Oct -/+ = rest / tie), Play, clocked by MIDI note 24 on the
+  MIDI port. MIDI input path, key and button ids: NOTES "MIDI input, keys and buttons" and "Step sequencer".
 - CC pages = encoder mode Custom 1 with 12 pages of CCs (`cfw/cc_pages.c`, host test `cfw/test/test_cc_pages.c`);
   stock page handling and the three hooks: NOTES "Encoder pages".
 

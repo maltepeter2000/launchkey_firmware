@@ -113,3 +113,34 @@
 0x20002d1c g_ctl_map                     data
 0x2000f39c g_enc_page                    data
 0x2000f4e8 g_enc_layout                  data
+
+# --- MIDI input, keys, buttons (see NOTES.md "MIDI input, keys and buttons") ---
+0x0801424a midi_rx_byte
+0x0801431c usbmidi_rx_packet
+0x08014418 midi_rx_poll
+0x08014502 io_poll
+0x08015c6c ctl_press
+0x080163e0 ui_button_press
+0x0801645e ui_button_release
+0x0801ab5e keybed_scan
+0x0801bdc8 ui_shifted_id
+0x0801dfa4 ctl_info
+0x0801fbd2 ctl_out_note
+0x0801fe0a note_on
+0x0801fe66 note_off
+0x08020c4c inmidi_out_notify
+0x08020cba inmidi_press_chain
+0x08020d94 inmidi_add_out_listener
+0x08021300 ui_octave_press
+0x08021374 ui_octave_release
+0x08025878 layout_channel
+0x080302f6 daw_port_rx_msg
+0x08030342 port_rx_sysex
+0x0803048c midi_port_rx_msg
+0x080317aa midi_port_rx_notes
+0x08030958 midi_rx_realtime
+0x0802fed0 g_ctl_types                   data
+0x080300d0 g_shift_id_table              data
+0x0803217c g_ctl_scan_types              data
+0x0803227c g_button_cc_table             data
+0x2000efb8 g_inmidi_out_listeners        data

@@ -24,3 +24,6 @@
 0x0801cba6  b.w cfw_enc_page_count 10b1801f   # was: cbz r0,...; subs r0,r0,#6 (enc_page_count, whole function replaced)
 0x080235d2  bl  cfw_enc_set_page   f9f7b2fa   # was: bl enc_set_page (up/down handler)
 0x080235d8  bl  cfw_enc_page_popup fff7effe   # was: bl ui_show_enc_page (up/down handler)
+
+# MIDI in: clock note for the step sequencer (cfw/seq_mode.c)
+0x0803049a  bl  cfw_midi_rx        01f086f9   # was: bl midi_port_rx_notes (MIDI port message handler 0x0803048C)

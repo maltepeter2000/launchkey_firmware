@@ -81,7 +81,19 @@ extern midi_port_t *g_app_ports[2];   /* written by main() at init */
 void midi_put(midi_port_t *port, uint32_t byte);
 void midi_send3(midi_port_t *port, uint32_t status, uint32_t d1, uint32_t d2);
 
-/* Controls: ids 0..15 = pads (0..7 top row), 56..63 = encoders 1..8, 25 = Shift.
+/* MIDI in. midi_port_rx_notes is the MIDI port's (USB cable 0) handler for note on/off, CC
+ * and program change, called from the main loop by the port's message handler (0x0803048C)
+ * with (port, status, data1, data2); returns 1 if it handled the message. cfw hooks that
+ * call (cfw_midi_rx). */
+uint32_t midi_port_rx_notes(midi_port_t *port, uint32_t status, uint32_t d1, uint32_t d2);
+
+/* Note-out listeners (inputmidi_listener.cpp, 1 of 8 used): called with (control id, group,
+ * number, value) for every message a control sends; group < 0x10 = note on channel `group`,
+ * value = velocity (0 = note off). Keys are control ids 0x80.. */
+void inmidi_add_out_listener(void (*fn)(uint32_t ctl, uint32_t group, uint32_t number, uint32_t value));
+
+/* Controls: ids 0..15 = pads (0..7 top row), 56..63 = encoders 1..8, 25 = Shift,
+ * 0x20 / 0x21 = Octave - / +, 0x48 = Play, 0x4A = Record, 0x80.. = keys (see NOTES).
  * ctl_block makes the stock app ignore a control (no notes / CCs); the input listeners
  * still see it. */
 void ctl_block(uint32_t id);

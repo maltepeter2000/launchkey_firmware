@@ -3,6 +3,7 @@
 #include "fw_api.h"
 #include "tm_mode.h"
 #include "cc_pages.h"
+#include "seq_mode.h"
 
 extern uint32_t __cfw_bss_start[], __cfw_bss_end[];
 
@@ -13,6 +14,14 @@ void cfw_init(void)
     for (uint32_t *p = __cfw_bss_start; p < __cfw_bss_end; p++)
         *p = 0;
     tm_mode_init();
+    seq_mode_init();
+}
+
+/* One feature listener for all cfw modes (the stock list has 8 slots, 6 used). */
+static void feat_changed(uint32_t id, uint32_t value)
+{
+    tm_feat_changed(id, value);
+    seq_feat_changed(id, value);
 }
 
 /* Hook: replaces one `bl confstore_poll` in the main loop (0x0801048A). */
@@ -22,9 +31,20 @@ void cfw_poll(void)
     confstore_poll();
     if (!started) {             /* first pass: all stock init is done */
         started = 1;
-        feat_add_listener(tm_feat_changed);
+        feat_add_listener(feat_changed);
+        inmidi_add_out_listener(seq_note_out);
     }
     tm_mode_poll();
+    seq_mode_poll();
+}
+
+/* Hook: replaces `bl midi_port_rx_notes` in the MIDI port's message handler (0x0803049A).
+ * The sequencer takes its clock note; everything else goes to the stock handler. */
+uint32_t cfw_midi_rx(midi_port_t *port, uint32_t status, uint32_t d1, uint32_t d2)
+{
+    if (seq_midi_rx(status, d1, d2))
+        return 1;
+    return midi_port_rx_notes(port, status, d1, d2);
 }
 
 /* Hook: replaces `bl fmt_version` in ui_show_boot_screen (0x08016E42). Visible proof that cave code runs. */
@@ -36,10 +56,13 @@ uint32_t cfw_boot_version(char *buf, uint32_t pos, uint32_t size, const uint32_t
 
 /* ---- input dispatchers: replace the stock ones (see cfw/hooks.txt) ---- */
 
-/* Turing Machine mode first; what it passes on may belong to the CC pages (cc_pages.c). */
+/* Turing Machine mode first; what it passes on may belong to the step sequencer
+ * (seq_mode.c) or the CC pages (cc_pages.c). */
 static int io_event(int list, uint32_t id, uint32_t v)
 {
     int r = tm_io_event(list, id, v);
+    if (r == TM_PASS)
+        r = seq_io_event(list, id);
     return r == TM_PASS ? ccp_io_event(list, id) : r;
 }
 

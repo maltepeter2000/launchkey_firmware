@@ -67,9 +67,17 @@ build/test_tm_core: cfw/test/test_tm_core.c cfw/tm_core.c cfw/tm_core.h | build
 build/test_cc_pages: cfw/test/test_cc_pages.c cfw/cc_pages.c $(wildcard cfw/*.h) | build
 	clang -std=c11 -Wall -Wextra -Werror -O1 -o $@ cfw/test/test_cc_pages.c cfw/cc_pages.c
 
-cfw-test: build/test_tm_core build/test_cc_pages
+build/test_seq_core: cfw/test/test_seq_core.c cfw/seq_core.c cfw/seq_core.h | build
+	clang -std=c11 -Wall -Wextra -Werror -O1 -o $@ cfw/test/test_seq_core.c cfw/seq_core.c
+
+build/test_seq_mode: cfw/test/test_seq_mode.c cfw/seq_mode.c cfw/seq_core.c $(wildcard cfw/*.h) | build
+	clang -std=c11 -Wall -Wextra -Werror -O1 -o $@ cfw/test/test_seq_mode.c cfw/seq_mode.c cfw/seq_core.c
+
+cfw-test: build/test_tm_core build/test_cc_pages build/test_seq_core build/test_seq_mode
 	build/test_tm_core
 	build/test_cc_pages
+	build/test_seq_core
+	build/test_seq_mode
 
 # Version field 4 = number of patches (stock 1.3.1563.1717 -> 1.3.1563.<n>)
 build/patched.bin: $(BIN) $(PATCHES) tools/apply_patches.py

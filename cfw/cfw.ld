@@ -9,7 +9,7 @@
 MEMORY
 {
     FLASH (rx)  : ORIGIN = 0x080372B4, LENGTH = 0x08040000 - 0x080372B4
-    RAM   (rw)  : ORIGIN = 0x2000F520, LENGTH = 0x100
+    RAM   (rw)  : ORIGIN = 0x2000F520, LENGTH = 0x180
 }
 
 INCLUDE fw_api.ld
