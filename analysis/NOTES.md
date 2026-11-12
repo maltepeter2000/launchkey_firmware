@@ -217,6 +217,23 @@ Static analysis for the step sequencer; nothing in this section is confirmed on 
   MIDI, Quantise, Metronome, Undo), 0x48 = CC 115 Play, 0x49 = 116 Stop, 0x4A = 117 Record, 0x4B = 118 Loop.
   Record is identified by this table only.
 
+## Settings store (confstore / extdata_confstore, static analysis)
+
+- `confstore_register(key, ptr, size, delay_ms)` @0x08016E7A: size is stored as a **byte** and the record
+  layer caps it at **0xF8 = 248 bytes** per key. Tables: up to 80 keys (16 B entries @0x20007C6C) and 40
+  buffers (24 B entries @0x20009D70); stock registers 59 keys / 15 buffers (4 custom-mode groups x 14 keys,
+  0xDA7A5500, 0xDA7AAA00, feature blob 0xFEA70BE5). Several keys may share one buffer pointer.
+- SPI flash region: offset **0x60000, 0x20000 bytes** = 32 sectors of 4 KiB = 512 slots of 256 bytes
+  (`extdata_confstore.c` @~0x0802C8F0, asserts on slot alignment and < 0x20000). Slot = key (u32 LE) +
+  generation word (u32, top nibble wraps; newer one wins at load) + 248 payload bytes, 0xFF padded.
+  Key 0xFFFFFFFF = free slot, 0 = invalidated.
+- Boot: `confstore_poll` scans all slots and copies the newest record of each registered key into its buffer,
+  then runs the loaded callbacks (`confstore_add_loaded_cb`, max 8). Keys must be registered before that
+  (cfw_init runs at the end of feature init, early enough: its persistent feature params rely on the same).
+- Write: `confstore_mark_dirty(ptr)` -> after the key's delay the record goes to a free slot and the old slot
+  is invalidated; sectors are recycled (4 KiB erase) by the store itself. No CRC on the payload.
+- For cfw data: one key per <= 248-byte block. Not yet used by cfw; nothing here is tested on hardware.
+
 ## Step sequencers (cfw, pad modes Custom 1, 2 and 3)
 
 - `cfw/seq_mode.c` + `cfw/seq_core.c` (host tests `cfw/test/test_seq_core.c`, `test_seq_mode.c`). Three
