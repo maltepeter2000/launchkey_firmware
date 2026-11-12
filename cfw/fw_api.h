@@ -38,6 +38,14 @@ extern const uint8_t g_scale_intervals[][12];
 /* Main loop: called several times per pass; cfw_poll hooks one of these calls. */
 void confstore_poll(void);
 
+/* Settings store (external SPI flash, see NOTES "Settings store"): a registered buffer of up
+ * to 248 bytes is filled from its record at boot and written delay_ms after it was marked
+ * dirty. Register at feature-init time (before the store is read); loaded callbacks (4 of 8
+ * used by stock fw) run once all records are in. */
+void confstore_register(uint32_t key, void *buf, uint32_t size, uint32_t delay_ms);
+void confstore_add_loaded_cb(void (*fn)(void));
+void confstore_mark_dirty(uint32_t key);
+
 /* Display: screen 1 + template 0 = two-line popup (field 0 title, field 1 value), as used by
  * the encoder-mode switch. disp_text sets a field and redraws. ui_popup_begin notifies the UI
  * that a popup starts (called by the stock popups before drawing). */

@@ -1,352 +1,365 @@
-/* Host unit tests for seq_core (make cfw-test). */
+/* Host tests for cfw/seq_core.c. */
+#include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include "../seq_core.h"
 
 static int failures, checks;
 #define CHECK(cond) do { checks++; if (!(cond)) { failures++; \
     printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while (0)
 
-/* one-voice expectations: -1 = nothing */
-#define OUT(o, off_, on_) (((off_) < 0 ? (o).n_off == 0 : (o).n_off == 1 && (o).off[0] == (off_)) \
-                           && ((on_) < 0 ? (o).n_on == 0 : (o).n_on == 1 && (o).on[0] == (on_)))
-#define SOUNDS(s, n) ((n) < 0 ? (s).n_sounding == 0 : (s).n_sounding == 1 && (s).sounding[0] == (n))
+static seq_data_t d;
+static seq_t s;
+static seq_out_t out;
 
-#define MAX_STEPS 100
-static uint8_t mem[MAX_STEPS * SEQ_VOICES_MAX];
-
-static void record(seq_t *s, const uint8_t *steps, int n)
+static void fresh(void)
 {
-    seq_out_t o;
-    seq_clear(s, &o);
-    seq_record_start(s, &o);
-    for (int i = 0; i < n; i++)
-        seq_record_add(s, steps[i]);
-    seq_record_stop(s);
+    memset(&d, 0x55, sizeof d);
+    memset(&s, 0x55, sizeof s);
+    seq_init(&s, &d, 1);
 }
 
-static void test_record(void)
+/* records the steps given as a 0xFF-terminated list (single notes, SEQ_REST, SEQ_TIE) */
+static void record(const uint8_t *steps)
 {
-    seq_t s;
-    seq_out_t o;
-    seq_init(&s, mem, MAX_STEPS, 1);
-    CHECK(s.state == SEQ_STOPPED && s.len == 0 && SOUNDS(s, -1));
-    CHECK(seq_record_add(&s, 60) == 0 && s.len == 0);       /* not recording */
-
-    seq_record_start(&s, &o);
-    CHECK(s.state == SEQ_RECORDING && OUT(o, -1, -1));
-    CHECK(seq_record_add(&s, 60) && seq_record_add(&s, SEQ_REST) && seq_record_add(&s, SEQ_TIE));
-    CHECK(seq_record_add(&s, 0) && seq_record_add(&s, 127));
-    CHECK(seq_record_add(&s, 0x82) == 0 && seq_record_add(&s, 200) == 0);
-    CHECK(s.len == 5);
+    seq_record_start(&s, &out);
+    for (; *steps != 0xFF; steps++)
+        CHECK(seq_record_add(&s, *steps) == 1);
     seq_record_stop(&s);
-    CHECK(s.state == SEQ_STOPPED && s.len == 5);            /* last step entered = length */
-    CHECK(mem[0] == 60 && mem[1] == SEQ_REST && mem[2] == SEQ_TIE && mem[4] == 127);
-    CHECK(seq_record_add(&s, 61) == 0 && s.len == 5);
-
-    seq_record_start(&s, &o);                               /* the sequence is kept */
-    CHECK(s.len == 5 && s.state == SEQ_RECORDING && s.rec == 0);
-    seq_record_stop(&s);
-    CHECK(s.len == 5 && mem[0] == 60);
-    seq_record_start(&s, &o);                               /* entries overwrite from step 1 */
-    CHECK(seq_record_add(&s, 70) && seq_record_add(&s, 71) && s.len == 5);
-    seq_record_stop(&s);
-    CHECK(s.len == 5 && mem[0] == 70 && mem[1] == 71 && mem[2] == SEQ_TIE);
-
-    seq_clear(&s, &o);                                      /* reset */
-    CHECK(s.len == 0 && s.state == SEQ_STOPPED && OUT(o, -1, -1));
-    seq_record_start(&s, &o);
-    seq_record_add(&s, 50);
-    seq_clear(&s, &o);                                      /* while recording: goes on at step 1 */
-    CHECK(s.len == 0 && s.rec == 0 && s.state == SEQ_RECORDING);
-    for (int i = 0; i < MAX_STEPS - 1; i++)
-        CHECK(seq_record_add(&s, (uint8_t)(i & 0x7F)) && s.state == SEQ_RECORDING);
-    CHECK(seq_record_add(&s, 1) && s.len == MAX_STEPS && s.state == SEQ_RECORDING);
-    CHECK(seq_record_add(&s, 2) == 0 && s.len == MAX_STEPS && s.state == SEQ_STOPPED);  /* full */
-    CHECK(seq_record_add_note(&s, 3) == 0);                 /* one voice: no chords */
 }
 
-static void test_play(void)
+static int no_cc(void)
 {
-    static const uint8_t steps[] = {60, 62, SEQ_REST, 64};
-    seq_t s;
-    seq_out_t o;
-    seq_init(&s, mem, MAX_STEPS, 1);
-
-    CHECK(seq_play_start(&s, &o) == 0 && s.state == SEQ_STOPPED);   /* empty */
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, -1));
-
-    record(&s, steps, 4);
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, -1) && s.pos == -1);                           /* clock without Play */
-
-    CHECK(seq_play_start(&s, &o) == 1 && s.state == SEQ_PLAYING && OUT(o, -1, -1));
-    seq_clock_off(&s, &o);
-    CHECK(OUT(o, -1, -1));                                          /* nothing sounding yet */
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, 60) && s.pos == 0);
-    seq_clock_off(&s, &o);
-    CHECK(OUT(o, 60, -1));
-    seq_clock_off(&s, &o);
-    CHECK(OUT(o, -1, -1));
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, 62) && s.pos == 1);
-    seq_clock_on(&s, &o);                                           /* clock without note off */
-    CHECK(OUT(o, 62, -1) && s.pos == 2 && SOUNDS(s, -1));            /* rest */
-    seq_clock_off(&s, &o);
-    CHECK(OUT(o, -1, -1));
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, 64) && s.pos == 3);
-    seq_clock_on(&s, &o);                                           /* wraps, legato off -> on */
-    CHECK(OUT(o, 64, 60) && s.pos == 0);
-
-    seq_stop(&s, &o);
-    CHECK(OUT(o, 60, -1) && s.state == SEQ_STOPPED && SOUNDS(s, -1));
-    seq_stop(&s, &o);
-    CHECK(OUT(o, -1, -1));
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, -1));
-
-    seq_play_start(&s, &o);                                         /* always from step 1 */
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, 60) && s.pos == 0);
-
-    seq_record_start(&s, &o);                                       /* Record while playing */
-    CHECK(OUT(o, 60, -1) && s.state == SEQ_RECORDING && s.rec == 0);
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, -1));
-    seq_record_add(&s, 48);
-    CHECK(seq_play_start(&s, &o) == 1 && s.state == SEQ_PLAYING && s.len == 4);   /* Play ends recording */
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, 48));
-    seq_clock_off(&s, &o);
-    CHECK(OUT(o, 48, -1));
-    seq_clear(&s, &o);                                              /* reset while playing */
-    CHECK(s.state == SEQ_STOPPED && s.len == 0);
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, 48, -1) == 0 && o.n_on == 0);
-    seq_clock_on(&s, &o);
-    seq_clear(&s, &o);
-    static const uint8_t one[] = {48};
-    record(&s, one, 1);
-    seq_play_start(&s, &o);
-    seq_clock_on(&s, &o);
-    seq_clear(&s, &o);
-    CHECK(OUT(o, 48, -1));                                          /* releases the note */
-    record(&s, one, 1);
-    seq_play_start(&s, &o);
-    seq_clock_on(&s, &o);
-    seq_clock_off(&s, &o);
-    CHECK(OUT(o, 48, -1));                                          /* one step: next is itself */
+    return out.cc[0] == SEQ_NONE && out.cc[1] == SEQ_NONE && out.cc[2] == SEQ_NONE;
 }
 
-static void test_ties(void)
+static void test_init(void)
 {
-    static const uint8_t steps[] = {60, SEQ_TIE, SEQ_TIE, 62, SEQ_REST, SEQ_TIE};
-    seq_t s;
-    seq_out_t o;
-    seq_init(&s, mem, MAX_STEPS, 1);
-    record(&s, steps, 6);
-    seq_play_start(&s, &o);
-
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, 60));
-    seq_clock_off(&s, &o);
-    CHECK(OUT(o, -1, -1) && SOUNDS(s, 60));      /* next is a tie: held */
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, -1) && s.pos == 1);
-    seq_clock_off(&s, &o);
-    CHECK(OUT(o, -1, -1) && SOUNDS(s, 60));
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, -1) && s.pos == 2);
-    seq_clock_off(&s, &o);
-    CHECK(OUT(o, 60, -1));                      /* next is a note: gate ends */
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, 62));
-    seq_clock_off(&s, &o);
-    CHECK(OUT(o, 62, -1));
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, -1) && s.pos == 4);        /* rest */
-    seq_clock_off(&s, &o);
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, -1) && s.pos == 5 && SOUNDS(s, -1));   /* tie after a rest stays silent */
-    seq_clock_off(&s, &o);
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, 60) && s.pos == 0);
-
-    /* a tie on step 1 holds the last step's note over the loop point */
-    static const uint8_t loop[] = {SEQ_TIE, 67};
-    record(&s, loop, 2);
-    seq_play_start(&s, &o);
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, -1));
-    seq_clock_off(&s, &o);
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, 67));
-    seq_clock_off(&s, &o);
-    CHECK(OUT(o, -1, -1) && SOUNDS(s, 67));
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, -1) && s.pos == 0 && SOUNDS(s, 67));
-    seq_clock_off(&s, &o);
-    CHECK(OUT(o, 67, -1));
-    seq_clock_on(&s, &o);
-    CHECK(OUT(o, -1, 67));
-    seq_stop(&s, &o);
-    CHECK(OUT(o, 67, -1));
-}
-
-static void test_long(void)
-{
-    seq_t s;
-    seq_out_t o;
-    seq_init(&s, mem, MAX_STEPS, 1);
-    seq_record_start(&s, &o);
-    for (int i = 0; i < MAX_STEPS; i++)
-        seq_record_add(&s, (uint8_t)(20 + i));
-    seq_play_start(&s, &o);
-    for (int lap = 0; lap < 3; lap++)
-        for (int i = 0; i < MAX_STEPS; i++) {
-            seq_clock_on(&s, &o);
-            CHECK(OUT(o, -1, 20 + i) && s.pos == i);
-            seq_clock_off(&s, &o);
-            CHECK(OUT(o, 20 + i, -1));
-        }
-}
-
-static int same(const uint8_t *a, int n, int a0, int a1, int a2, int a3)
-{
-    const int e[4] = {a0, a1, a2, a3};
-    int count = 0;
-    while (count < 4 && e[count] >= 0)
-        count++;
-    if (n != count)
-        return 0;
-    for (int i = 0; i < n; i++)
-        if (a[i] != e[i])
-            return 0;
-    return 1;
-}
-
-static void test_poly(void)
-{
-    seq_t s;
-    seq_out_t o;
-    uint8_t notes[SEQ_VOICES_MAX];
-    seq_init(&s, mem, 8, SEQ_VOICES_MAX);
-    CHECK(seq_record_add_note(&s, 60) == 0);                /* not recording */
-    seq_record_start(&s, &o);
-    CHECK(seq_record_add_note(&s, 60) == 0);                /* no step yet */
-
-    CHECK(seq_record_add(&s, 60) && seq_record_add_note(&s, 64) && seq_record_add_note(&s, 67));
-    CHECK(seq_record_add_note(&s, 64) == 0);                /* already in the step */
-    CHECK(seq_record_add_note(&s, 72) && seq_record_add_note(&s, 76) == 0);   /* 4 voices */
-    CHECK(seq_step_notes(&s, 0, notes) == 4 && same(notes, 4, 60, 64, 67, 72));
-    CHECK(seq_record_add(&s, 50) && seq_step_notes(&s, 1, notes) == 1 && notes[0] == 50);
-    CHECK(seq_record_add(&s, SEQ_TIE) && seq_record_add_note(&s, 51) == 0);
-    CHECK(seq_record_add(&s, SEQ_REST) && seq_record_add_note(&s, 51) == 0);
-    CHECK(seq_step_notes(&s, 2, notes) == 0 && seq_step_notes(&s, 3, 0) == 0);
-    CHECK(seq_step_kind(&s, 0) == 60 && seq_step_kind(&s, 2) == SEQ_TIE && seq_step_kind(&s, 3) == SEQ_REST);
-    CHECK(seq_record_add(&s, 40) && seq_record_add_note(&s, 47));
-    seq_record_stop(&s);
-    CHECK(s.len == 5 && seq_record_add_note(&s, 48) == 0);
-
-    /* chord, 50 tied, rest, 40+47 */
-    seq_play_start(&s, &o);
-    seq_clock_on(&s, &o);
-    CHECK(o.n_off == 0 && same(o.on, o.n_on, 60, 64, 67, 72) && s.n_sounding == 4);
-    seq_clock_off(&s, &o);
-    CHECK(same(o.off, o.n_off, 60, 64, 67, 72) && o.n_on == 0 && s.n_sounding == 0);
-    seq_clock_on(&s, &o);
-    CHECK(same(o.on, o.n_on, 50, -1, -1, -1));
-    seq_clock_off(&s, &o);
-    CHECK(o.n_off == 0 && s.n_sounding == 1);               /* tie follows */
-    seq_clock_on(&s, &o);
-    CHECK(o.n_off == 0 && o.n_on == 0);
-    seq_clock_off(&s, &o);
-    CHECK(same(o.off, o.n_off, 50, -1, -1, -1));
-    seq_clock_on(&s, &o);
-    CHECK(o.n_off == 0 && o.n_on == 0 && s.pos == 3);       /* rest */
-    seq_clock_on(&s, &o);
-    CHECK(same(o.on, o.n_on, 40, 47, -1, -1));
-    seq_clock_on(&s, &o);                                   /* no note off: chord to chord */
-    CHECK(same(o.off, o.n_off, 40, 47, -1, -1) && same(o.on, o.n_on, 60, 64, 67, 72));
-    seq_stop(&s, &o);
-    CHECK(same(o.off, o.n_off, 60, 64, 67, 72) && s.n_sounding == 0);
-
-    /* a tie holds the whole chord; the memory limit ends the recording */
-    seq_clear(&s, &o);
-    seq_record_start(&s, &o);
-    for (int i = 0; i < 8; i++) {
-        CHECK(seq_record_add(&s, i == 1 ? SEQ_TIE : (uint8_t)(30 + i)));
-        if (i == 0)
-            seq_record_add_note(&s, 37);
+    fresh();
+    CHECK(s.state == SEQ_STOPPED && d.len == 0 && d.start == 0 && d.dir == SEQ_DIR_FORWARD);
+    for (int i = 0; i < SEQ_STEPS; i++) {
+        CHECK(seq_step_kind(&s, i) == SEQ_REST && seq_step_notes(&s, i, 0) == 0);
+        CHECK(!seq_accent(&s, i));
+        for (int l = 0; l < SEQ_LANES; l++)
+            CHECK(seq_cc(&s, i, l) == SEQ_NONE);
     }
-    CHECK(s.state == SEQ_RECORDING && seq_record_add_note(&s, 99));   /* last step still open */
-    CHECK(seq_record_add(&s, 1) == 0 && s.state == SEQ_STOPPED && s.len == 8);
-    seq_play_start(&s, &o);
-    seq_clock_on(&s, &o);
-    seq_clock_off(&s, &o);
-    seq_clock_on(&s, &o);
-    CHECK(o.n_off == 0 && o.n_on == 0 && s.n_sounding == 2);
-    seq_clock_off(&s, &o);
-    CHECK(same(o.off, o.n_off, 30, 37, -1, -1));
-    for (int i = 2; i < 8; i++)
-        seq_clock_on(&s, &o);
-    CHECK(same(o.on, o.n_on, 37, 99, -1, -1) && s.pos == 7);
+    CHECK(seq_play_start(&s, &out) == 0 && s.state == SEQ_STOPPED);
+    seq_clock_on(&s, &out);
+    CHECK(out.n_on == 0 && out.n_off == 0 && no_cc());
+    CHECK(seq_record_add(&s, 60) == 0 && seq_record_add_note(&s, 60) == 0);
+    CHECK(seq_record_seek(&s, 0) == 0);
 }
 
-static void test_seek(void)
+static void test_record_play(void)
 {
-    static const uint8_t steps[] = {60, 62, 64, 65, 67};
-    seq_t s;
-    seq_out_t o;
-    uint8_t notes[SEQ_VOICES_MAX];
-    seq_init(&s, mem, 8, SEQ_VOICES_MAX);
-    CHECK(seq_record_seek(&s, 0) == 0);                     /* not recording */
-    record(&s, steps, 5);
-    seq_record_start(&s, &o);
-    seq_record_add_note(&s, 50);
-    CHECK(seq_step_notes(&s, 0, 0) == 1);                   /* nothing entered yet: no chord */
-    CHECK(seq_record_seek(&s, 6) == 0 && seq_record_seek(&s, -1) == 0 && seq_record_seek(&s, 8) == 0);
+    static const uint8_t steps[] = {48, SEQ_REST, 55, SEQ_TIE, 60, 0xFF};
+    fresh();
+    record(steps);
+    CHECK(d.len == 5 && s.state == SEQ_STOPPED);
+    CHECK(seq_step_kind(&s, 0) == 48 && seq_step_kind(&s, 1) == SEQ_REST && seq_step_kind(&s, 3) == SEQ_TIE);
+    seq_clock_on(&s, &out);                     /* not playing */
+    CHECK(out.n_on == 0);
+    CHECK(seq_play_start(&s, &out) == 1 && s.state == SEQ_PLAYING && s.pos == -1);
 
-    /* change step 3, then step 4 follows; the length is kept */
-    CHECK(seq_record_seek(&s, 2) && s.rec == 2 && s.len == 5);
-    CHECK(seq_record_add(&s, 72) && seq_record_add_note(&s, 76) && s.rec == 3);
-    CHECK(seq_record_add(&s, SEQ_REST) && s.rec == 4 && s.len == 5);
+    seq_clock_on(&s, &out);
+    CHECK(s.pos == 0 && out.n_off == 0 && out.n_on == 1 && out.on[0] == 48 && !out.accent && no_cc());
+    seq_clock_off(&s, &out);
+    CHECK(out.n_off == 1 && out.off[0] == 48 && out.n_on == 0);
+    seq_clock_off(&s, &out);                    /* nothing sounding */
+    CHECK(out.n_off == 0);
+    seq_clock_on(&s, &out);                     /* rest */
+    CHECK(s.pos == 1 && out.n_on == 0 && out.n_off == 0);
+    seq_clock_off(&s, &out);
+    seq_clock_on(&s, &out);
+    CHECK(s.pos == 2 && out.n_on == 1 && out.on[0] == 55);
+    seq_clock_off(&s, &out);                    /* a tie follows: held */
+    CHECK(out.n_off == 0);
+    seq_clock_on(&s, &out);                     /* tie */
+    CHECK(s.pos == 3 && out.n_on == 0 && out.n_off == 0);
+    seq_clock_off(&s, &out);
+    CHECK(out.n_off == 1 && out.off[0] == 55);
+    seq_clock_on(&s, &out);
+    CHECK(s.pos == 4 && out.on[0] == 60);
+    seq_clock_on(&s, &out);                     /* no clock off: released by the next step */
+    CHECK(s.pos == 0 && out.n_off == 1 && out.off[0] == 60 && out.n_on == 1 && out.on[0] == 48);
+    seq_stop(&s, &out);
+    CHECK(s.state == SEQ_STOPPED && out.n_off == 1 && out.off[0] == 48);
+    seq_clock_on(&s, &out);
+    CHECK(out.n_on == 0);
+
+    /* recording again keeps the sequence: entries replace notes, the length only grows */
+    seq_record_start(&s, &out);
+    CHECK(s.state == SEQ_RECORDING && s.rec == 0 && d.len == 5);
+    CHECK(seq_record_add(&s, 50) == 1 && d.len == 5 && seq_step_kind(&s, 0) == 50);
+    CHECK(seq_record_add(&s, 200) == 0 && seq_record_add(&s, 0x82) == 0 && s.rec == 1);
+    CHECK(seq_record_seek(&s, 5) == 1 && seq_record_seek(&s, 6) == 0 && seq_record_seek(&s, -1) == 0);
+    CHECK(seq_record_add(&s, 62) == 1 && d.len == 6);
+    CHECK(seq_record_seek(&s, 2) == 1 && s.rec == 2);
+    CHECK(seq_record_add(&s, SEQ_REST) == 1 && seq_step_kind(&s, 2) == SEQ_REST && d.len == 6);
     seq_record_stop(&s);
-    CHECK(s.len == 5 && seq_step_kind(&s, 0) == 60 && seq_step_kind(&s, 1) == 62 && seq_step_kind(&s, 4) == 67);
-    CHECK(seq_step_notes(&s, 2, notes) == 2 && notes[0] == 72 && notes[1] == 76);
-    CHECK(seq_step_kind(&s, 3) == SEQ_REST);
+    CHECK(s.state == SEQ_STOPPED && seq_record_seek(&s, 0) == 0);
 
-    /* a chord step overwritten by one note loses its other notes */
-    seq_record_start(&s, &o);
-    CHECK(seq_record_seek(&s, 2) && seq_record_add(&s, 40));
-    CHECK(seq_step_notes(&s, 2, notes) == 1 && notes[0] == 40);
+    /* clear */
+    seq_play_start(&s, &out);
+    seq_clock_on(&s, &out);
+    seq_clear(&s, &out);
+    CHECK(out.n_off == 1 && out.off[0] == 50 && d.len == 0 && s.state == SEQ_STOPPED);
+    CHECK(seq_step_kind(&s, 0) == SEQ_REST);
+    seq_record_start(&s, &out);
+    seq_record_add(&s, 40);
+    seq_clear(&s, &out);
+    CHECK(s.state == SEQ_RECORDING && s.rec == 0 && d.len == 0);
+}
 
-    /* the first free step can be selected: appending makes the sequence longer */
-    CHECK(seq_record_seek(&s, 5) && seq_record_add(&s, 41) && seq_record_add(&s, 42) && s.len == 7);
-    CHECK(seq_record_seek(&s, 7) && seq_record_add(&s, 43) && s.len == 8);
-    CHECK(seq_record_seek(&s, 8) == 0);                     /* beyond the memory */
-    CHECK(seq_record_add(&s, 44) == 0 && s.state == SEQ_STOPPED && s.len == 8);
+static void test_chords(void)
+{
+    uint8_t notes[SEQ_VOICES];
+    fresh();
+    CHECK(seq_record_add_note(&s, 60) == 0);
+    seq_record_start(&s, &out);
+    CHECK(seq_record_add_note(&s, 60) == 0);            /* no step yet */
+    seq_record_add(&s, 60);
+    CHECK(seq_record_add_note(&s, 64) == 1 && seq_record_add_note(&s, 64) == 0);
+    CHECK(seq_record_add_note(&s, 60) == 0 && seq_record_add_note(&s, 128) == 0);
+    CHECK(seq_record_add_note(&s, 67) == 1 && seq_record_add_note(&s, 70) == 1);
+    CHECK(seq_record_add_note(&s, 72) == 0);            /* full */
+    CHECK(seq_step_notes(&s, 0, notes) == 4 && notes[0] == 60 && notes[1] == 64 && notes[3] == 70);
+    seq_record_add(&s, SEQ_TIE);
+    CHECK(seq_record_add_note(&s, 50) == 0);            /* not onto a tie */
+    seq_record_add(&s, 40);
+    seq_record_seek(&s, 0);
+    seq_record_add(&s, 41);                             /* replaces the whole chord */
+    CHECK(seq_step_notes(&s, 0, notes) == 1 && notes[0] == 41);
+    seq_record_add_note(&s, 45);
+    seq_play_start(&s, &out);
+    seq_clock_on(&s, &out);
+    CHECK(out.n_on == 2 && out.on[0] == 41 && out.on[1] == 45);
+    seq_clock_off(&s, &out);
+    CHECK(out.n_off == 0);                              /* tie follows */
+    seq_clock_on(&s, &out);
+    seq_clock_off(&s, &out);
+    CHECK(out.n_off == 2 && out.off[0] == 41 && out.off[1] == 45);
+}
 
-    /* recording again starts at step 1 and keeps the rest */
-    seq_record_start(&s, &o);
-    seq_record_add(&s, 10);
-    CHECK(seq_play_start(&s, &o) && s.len == 8);            /* Play ends the recording */
-    seq_clock_on(&s, &o);
-    CHECK(same(o.on, o.n_on, 10, -1, -1, -1));
-    seq_clock_on(&s, &o);
-    CHECK(same(o.on, o.n_on, 62, -1, -1, -1));
+static void test_attributes(void)
+{
+    static const uint8_t steps[] = {48, 50, SEQ_TIE, 0xFF};
+    fresh();
+    record(steps);
+    seq_set_accent(&s, 1, 1);
+    seq_set_accent(&s, 2, 1);
+    seq_set_accent(&s, SEQ_STEPS - 1, 1);
+    seq_set_accent(&s, SEQ_STEPS, 1);                   /* ignored */
+    seq_set_accent(&s, -1, 1);
+    CHECK(!seq_accent(&s, 0) && seq_accent(&s, 1) && seq_accent(&s, 2) && seq_accent(&s, SEQ_STEPS - 1));
+    seq_set_accent(&s, SEQ_STEPS - 1, 0);
+    CHECK(!seq_accent(&s, SEQ_STEPS - 1) && seq_accent(&s, 1));
+    seq_set_cc(&s, 0, 0, 100);
+    seq_set_cc(&s, 2, 2, 0);
+    seq_set_cc(&s, 1, 1, 127);
+    seq_set_cc(&s, 1, 3, 5);                            /* ignored */
+    seq_set_cc(&s, SEQ_STEPS, 0, 5);
+    CHECK(seq_cc(&s, 0, 0) == 100 && seq_cc(&s, 0, 1) == SEQ_NONE && seq_cc(&s, 2, 2) == 0);
+    CHECK(seq_step_notes(&s, 1, 0) == 1 && seq_step_kind(&s, 1) == 50);     /* notes untouched */
+
+    seq_play_start(&s, &out);
+    seq_clock_on(&s, &out);
+    CHECK(out.on[0] == 48 && !out.accent && out.cc[0] == 100 && out.cc[1] == SEQ_NONE && out.cc[2] == SEQ_NONE);
+    seq_clock_on(&s, &out);
+    CHECK(out.on[0] == 50 && out.accent && out.cc[0] == SEQ_NONE && out.cc[1] == 127);
+    seq_clock_on(&s, &out);                             /* tie: controllers still go out */
+    CHECK(out.n_on == 0 && !out.accent && out.cc[2] == 0);
+    seq_stop(&s, &out);
+
+    /* entering notes keeps accent and controllers */
+    seq_record_start(&s, &out);
+    seq_record_add(&s, 30);
+    seq_record_add(&s, SEQ_REST);
+    seq_record_stop(&s);
+    CHECK(seq_cc(&s, 0, 0) == 100 && seq_accent(&s, 1) && seq_cc(&s, 1, 1) == 127);
+    seq_set_cc(&s, 0, 0, SEQ_NONE);
+    CHECK(seq_cc(&s, 0, 0) == SEQ_NONE);
+    seq_clear(&s, &out);
+    CHECK(!seq_accent(&s, 1) && seq_cc(&s, 1, 1) == SEQ_NONE && seq_cc(&s, 2, 2) == SEQ_NONE);
+}
+
+static void test_range(void)
+{
+    static const uint8_t steps[] = {40, 41, 42, 43, 0xFF};
+    static const uint8_t fwd[] = {41, 42, 41, 42};
+    fresh();
+    seq_set_start(&s, 3);
+    CHECK(d.start == 0);                                /* empty */
+    record(steps);
+    seq_set_len(&s, 6);                                 /* longer than entered: rests */
+    CHECK(d.len == 6 && seq_step_kind(&s, 5) == SEQ_REST);
+    seq_set_len(&s, 100);
+    CHECK(d.len == SEQ_STEPS);
+    seq_set_len(&s, 0);
+    CHECK(d.len == 1);
+    seq_set_len(&s, 3);
+    CHECK(d.len == 3 && seq_step_kind(&s, 3) == 43);    /* shortening keeps the steps */
+    seq_set_start(&s, 9);
+    CHECK(d.start == 2);
+    seq_set_start(&s, -4);
+    CHECK(d.start == 0);
+    seq_set_start(&s, 1);
+    seq_play_start(&s, &out);
+    for (int i = 0; i < 4; i++) {
+        seq_clock_on(&s, &out);
+        CHECK(out.n_on == 1 && out.on[0] == fwd[i]);
+    }
+    seq_set_len(&s, 1);                                 /* start follows */
+    CHECK(d.start == 0);
+    seq_clock_on(&s, &out);
+    seq_clock_on(&s, &out);
+    CHECK(s.pos == 0 && out.on[0] == 40);
+    seq_set_len(&s, 4);
+    seq_set_start(&s, 2);                               /* range moved away from the position */
+    seq_clock_on(&s, &out);
+    CHECK(s.pos == 2);
+    seq_clock_on(&s, &out);
+    seq_clock_on(&s, &out);
+    CHECK(s.pos == 2);
+    seq_record_start(&s, &out);
+    seq_record_seek(&s, 4);
+    seq_set_len(&s, 2);                                 /* record position stays reachable */
+    CHECK(s.rec == 2);
+}
+
+static void test_directions(void)
+{
+    static const uint8_t steps[] = {40, 41, 42, 43, 0xFF};
+    static const uint8_t rev[] = {43, 42, 41, 40, 43, 42};
+    static const uint8_t alt[] = {40, 41, 42, 43, 42, 41, 40, 41, 42};
+    static const uint8_t alt2[] = {41, 42, 41, 42};
+    int seen[4] = {0};
+    fresh();
+    record(steps);
+    d.dir = SEQ_DIR_REVERSE;
+    seq_play_start(&s, &out);
+    for (unsigned i = 0; i < sizeof rev; i++) {
+        seq_clock_on(&s, &out);
+        CHECK(out.on[0] == rev[i]);
+    }
+    d.dir = SEQ_DIR_ALTERNATE;
+    seq_play_start(&s, &out);
+    for (unsigned i = 0; i < sizeof alt; i++) {
+        seq_clock_on(&s, &out);
+        CHECK(out.on[0] == alt[i]);
+    }
+    seq_set_start(&s, 1);
+    seq_set_len(&s, 3);
+    seq_play_start(&s, &out);
+    for (unsigned i = 0; i < sizeof alt2; i++) {
+        seq_clock_on(&s, &out);
+        CHECK(out.on[0] == alt2[i]);
+    }
+    seq_set_start(&s, 2);                               /* one step: stays */
+    for (int i = 0; i < 3; i++) {
+        seq_clock_on(&s, &out);
+        CHECK(out.on[0] == 42);
+    }
+    seq_set_start(&s, 0);
+    seq_set_len(&s, 4);
+    d.dir = SEQ_DIR_RANDOM;
+    seq_play_start(&s, &out);
+    for (int i = 0; i < 200; i++) {
+        seq_clock_on(&s, &out);
+        CHECK(s.pos >= 0 && s.pos < 4 && out.on[0] == 40 + s.pos);
+        seen[s.pos]++;
+    }
+    CHECK(seen[0] > 20 && seen[1] > 20 && seen[2] > 20 && seen[3] > 20);
+    seq_set_start(&s, 2);
+    for (int i = 0; i < 50; i++) {
+        seq_clock_on(&s, &out);
+        CHECK(s.pos >= 2 && s.pos < 4);
+    }
+
+    /* a new direction counts from the next clock on */
+    seq_set_start(&s, 0);
+    seq_set_dir(&s, SEQ_DIR_FORWARD);
+    seq_set_dir(&s, 7);                                 /* ignored */
+    CHECK(d.dir == SEQ_DIR_FORWARD);
+    seq_play_start(&s, &out);
+    seq_clock_on(&s, &out);
+    seq_clock_on(&s, &out);                             /* at 41 */
+    seq_set_dir(&s, SEQ_DIR_REVERSE);
+    seq_clock_on(&s, &out);
+    CHECK(out.on[0] == 40);
+    seq_clock_on(&s, &out);
+    CHECK(out.on[0] == 43);
+    seq_set_dir(&s, SEQ_DIR_FORWARD);
+    seq_clock_on(&s, &out);
+    CHECK(out.on[0] == 40);
+
+    /* ties look at the step that really comes next */
+    static const uint8_t tied[] = {40, SEQ_TIE, 42, 0xFF};
+    fresh();
+    record(tied);
+    d.dir = SEQ_DIR_REVERSE;
+    seq_play_start(&s, &out);
+    seq_clock_on(&s, &out);                             /* 42, next is the tie */
+    CHECK(out.on[0] == 42);
+    seq_clock_off(&s, &out);
+    CHECK(out.n_off == 0);
+    seq_clock_on(&s, &out);                             /* tie, next is 40 */
+    seq_clock_off(&s, &out);
+    CHECK(out.n_off == 1 && out.off[0] == 42);
+    seq_clock_on(&s, &out);                             /* 40, next is 42 */
+    seq_clock_off(&s, &out);
+    CHECK(out.n_off == 1 && out.off[0] == 40);
+}
+
+static void test_full_and_sanitize(void)
+{
+    fresh();
+    seq_record_start(&s, &out);
+    for (int i = 0; i < SEQ_STEPS; i++)
+        CHECK(seq_record_add(&s, (uint8_t)(20 + i)) == 1);
+    CHECK(d.len == SEQ_STEPS && s.state == SEQ_RECORDING && s.rec == SEQ_STEPS);
+    CHECK(seq_record_add_note(&s, 100) == 1);
+    CHECK(seq_record_add(&s, 99) == 0 && s.state == SEQ_STOPPED && d.len == SEQ_STEPS);
+    CHECK(seq_step_kind(&s, SEQ_STEPS - 1) == 20 + SEQ_STEPS - 1);
+
+    /* a record with nonsense in it */
+    memset(&d, 0xEE, sizeof d);
+    s.state = SEQ_PLAYING;
+    seq_sanitize(&s);
+    CHECK(d.len == SEQ_STEPS && d.start == 0 && d.dir == SEQ_DIR_FORWARD);
+    for (int i = 0; i < SEQ_STEPS; i++) {
+        CHECK(seq_step_kind(&s, i) == SEQ_REST && seq_step_notes(&s, i, 0) == 0);
+        CHECK(seq_cc(&s, i, 0) == SEQ_NONE && seq_cc(&s, i, 2) == SEQ_NONE);
+    }
+    for (int i = 0; i < 2 * SEQ_STEPS; i++) {
+        seq_clock_on(&s, &out);
+        CHECK(out.n_on == 0 && s.pos == i % SEQ_STEPS);
+    }
+    d.len = 0;
+    seq_sanitize(&s);
+    CHECK(s.state == SEQ_STOPPED);
+    /* a valid record is left alone */
+    static const uint8_t steps[] = {40, SEQ_TIE, 0xFF};
+    seq_data_t copy;
+    fresh();
+    record(steps);
+    seq_set_cc(&s, 1, 1, 9);
+    seq_set_accent(&s, 0, 1);
+    d.dir = SEQ_DIR_RANDOM;
+    copy = d;
+    seq_sanitize(&s);
+    CHECK(!memcmp(&copy, &d, sizeof d));
 }
 
 int main(void)
 {
-    test_record();
-    test_play();
-    test_ties();
-    test_long();
-    test_poly();
-    test_seek();
+    test_init();
+    test_record_play();
+    test_chords();
+    test_attributes();
+    test_range();
+    test_directions();
+    test_full_and_sanitize();
     printf("seq_core: %d checks, %d failures\n", checks, failures);
     return failures != 0;
 }

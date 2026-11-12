@@ -8,8 +8,8 @@
 0x0801b574  70b50446  1cf058b9   # b.w cfw_io_dispatch_c  was: push {r4-r6,lr}; mov r4,r0
 0x0801b592  f8b50446  1cf021b9   # b.w cfw_io_dispatch_d
 0x08020e48  2de9f041  16f010bd   # b.w cfw_relin_dispatch_pos  was: push.w {r4-r8,lr}
-0x08020e56  2de9f041  16f03bbd   # b.w cfw_relin_dispatch_hires
-0x08020e8a  2de9f041  16f041bd   # b.w cfw_relin_dispatch_step
+0x08020e56  2de9f041  16f041bd   # b.w cfw_relin_dispatch_hires
+0x08020e8a  2de9f041  16f047bd   # b.w cfw_relin_dispatch_step
 0x0801cba6  10b1801f  1af085bb   # b.w cfw_enc_page_count  was: cbz r0,...; subs r0,r0,#6 (enc_page_count, whole function replaced)
 0x080235d2  f9f7b2fa  13f07dfe   # bl cfw_enc_set_page  was: bl enc_set_page (up/down handler)
 0x080235d8  fff7effe  13f08efe   # bl cfw_enc_page_popup  was: bl ui_show_enc_page (up/down handler)

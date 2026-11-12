@@ -32,9 +32,11 @@
 - RAM (64 KiB): RW data 0x20000000..0x200015D0 (decompressed from the image end), zero-init
   0x200015D0..0x2000F518 (scatter table @0x08033544), leaves **2 792 bytes** up to 0x20010000 for the main stack
   (initial SP 0x2000FFF8). Any new feature must find RAM inside existing buffers or share that headroom.
-- cfw RAM: 0x2000F520..0x2000F860 (`cfw/cfw.ld`, 832 bytes, 828 used; 576 of them are the three step
-  sequences). It was 256 bytes up to 0x2000F620 when the stack was measured (see "Stack" below), so the
-  untouched stack area is now >= 896 bytes. More sequencer steps cost stack margin: 4 bytes per step.
+- cfw RAM: 0x2000F520..0x2000F8F0 (`cfw/cfw.ld`, 976 bytes, 968 used; 711 of them are the three step
+  sequencer records). It was 256 bytes up to 0x2000F620 when the stack was measured (see "Stack" below), so
+  the untouched stack area is now >= 752 bytes. More sequencer steps cost stack margin: 7 bytes per step
+  and sequencer (48 steps would need two store records per sequencer and ~340 bytes more). The Turing
+  Machine uses only ~50 bytes of RAM.
 
 ## Modes and layouts (fw 1563)
 
@@ -232,32 +234,51 @@ Static analysis for the step sequencer; nothing in this section is confirmed on 
   (cfw_init runs at the end of feature init, early enough: its persistent feature params rely on the same).
 - Write: `confstore_mark_dirty(ptr)` -> after the key's delay the record goes to a free slot and the old slot
   is invalidated; sectors are recycled (4 KiB erase) by the store itself. No CRC on the payload.
-- For cfw data: one key per <= 248-byte block. Not yet used by cfw; nothing here is tested on hardware.
+- For cfw data: one key per <= 248-byte block; used by the step sequencers (`confstore_register`,
+  `confstore_add_loaded_cb`, `confstore_mark_dirty(key)` in `cfw/fw_api.h`). A key without a record keeps
+  the buffer's contents (defaults). Nothing here is tested on hardware.
 
 ## Step sequencers (cfw, pad modes Custom 1, 2 and 3)
 
 - `cfw/seq_mode.c` + `cfw/seq_core.c` (host tests `cfw/test/test_seq_core.c`, `test_seq_mode.c`). Three
-  instances of the core, 4 voices and 48 steps each (4 bytes per step: note / 0x80 rest / 0x81 tie, further
-  slots note or 0xFF), RAM only. Instance n (1..3) = feature 0x1D value 4 + n (pad Custom 1..3) = MIDI channel n.
-- The pad mode only selects the instance the controls, keys and pads belong to (`seq`); playback of all
-  instances goes on whatever pad mode is selected. Leaving a pad mode ends that instance's recording.
-- Record (0x4A, with and without Shift) and Play (0x48, Shift up) are consumed in the io dispatchers while a
-  sequencer pad mode is selected; Oct - / Oct + (0x20 / 0x21) only with Shift while recording (rest / tie).
-  Record keeps the sequence and records from step 1 (`rec`), overwriting; Shift + Record = `seq_clear`.
-  Pads are consumed; while recording a pad moves the record position (`seq_record_seek`, steps 0..len on
-  the page shown).
+  instances of the core. Instance n (1..3) = feature 0x1D value 4 + n (pad Custom 1..3) = MIDI channel n.
+- Record `seq_data_t` (237 bytes, one settings-store record per instance, keys 0x5E9C0F01..03, written 3 s
+  after `confstore_mark_dirty`): len, start, dir, sync, rate, accent amount, 3 CC numbers, 32 accent bits,
+  32 steps x 7 bytes (4 note slots: note / 0x80 rest / 0x81 tie, further slots note or 0xFF; 3 controller
+  values or 0xFF). Registered in `seq_mode_init` (feature-init time); a loaded callback limits all fields
+  (`sanitize`), since the store has no checksum. Unknown keys are invalidated by the stock firmware at
+  boot, so flashing stock firmware drops the records.
+- The pad mode only selects the instance the controls, keys, pads and encoders belong to (`seq`); playback
+  of all instances goes on whatever pad mode is selected. Leaving a pad mode ends that instance's recording.
+- Record (0x4A, with and without Shift) and Play (0x48; with Shift only while recording = accent) are
+  consumed in the io dispatchers while a sequencer pad mode is selected; Oct - / Oct + (0x20 / 0x21) only
+  with Shift while recording (rest / tie). Shift + Record = `seq_clear` while recording, else toggles
+  `sync`. Pads are consumed; while recording a pad moves the record position (`seq_record_seek`).
+- Encoders (0x38..0x3F) are taken like in the Turing Machine mode (io events -> TM_ENC_ONLY, turns in
+  `seq_enc_event`): 1..5 on the step list (rate, direction, accent amount, first step, length), 6..8 on the
+  pos list (controller value) or, with Shift, on the step list (controller number). Shift + encoder 1..5
+  is left to the stock firmware. `cfw_init.c` asks tm, then seq, then the CC pages.
+- Edit step (`edit_step`): rec - 1 after an entry, rec after Record / a pad. Accent and controller values
+  go there; `seq_record_add` keeps both.
 - Chords: `seq_io_event` counts the keys held (ids >= 0x80); the note-out listener `seq_note_out` stores a
   key's note as a new step, or adds it to the last step while another key is still down
   (`seq_record_add_note`). A button or pad press ends the chord. Keys that do not sound directly (Arp on)
   record nothing.
-- Clock: `cfw_midi_rx` passes note on / off of note 24 on the MIDI port to `seq_midi_rx`; on channel n it
-  clocks instance n if that is playing (the note is swallowed then, otherwise it goes to the stock handler).
-  Note on = next step, note off = gate end unless the next step is a tie. Notes go out with `midi_send3` on
-  g_app_ports[1] on channel n, velocity 100. While the selected instance plays, `seq_note_out` treats note
-  24 from a key (ctl >= 0x80; value 0 = release, any Keys Channel) as its clock.
-- The listener and the MIDI handler only change state; pads (LED override layer) and the popup are drawn
-  from `seq_mode_poll` in the main loop for the selected instance. cfw_init registers one feature listener
-  for both modes (`feat_changed`) to save a slot. **Status: built, host-tested, not yet tested on hardware.**
+- Clock note (sync = 0): `cfw_midi_rx` passes note on / off of note 24 on the MIDI port to `seq_midi_rx`; on
+  channel n it clocks instance n if that is playing (the note is swallowed then, otherwise it goes to the
+  stock handler). Note on = next step, note off = gate end unless the next step is a tie. While the
+  selected instance plays, `seq_note_out` treats note 24 from a key as its clock.
+- MIDI clock (sync = 1): `run_clocks` (main loop, all instances) follows `g_clock_ticks` like the Turing
+  Machine. Per tick acc += num; a step when acc >= 6 * den (rate table num/den, x1 = 6 ticks = 1/16), gate
+  off at half a period. Play starts with a step at once. Start / Stop / Continue messages are not used.
+- Playback order: `seq_clock_on` plays `next` (planned at the previous clock, so the gate end knows whether
+  a tie follows) within start..len-1; directions forward, reverse, alternate (end steps once), random
+  (xorshift16). Output order: note offs, controllers of the step, note ons (accent 127, else 127 - amount).
+- Pads: LED override layer; record position = LED_PULSE (mode 2, **not yet seen on hardware**), lane view
+  (blue) for 48 clock ticks after a controller turn while recording.
+- The listener and the MIDI handler only change state; pads and the popup are drawn from `seq_mode_poll`
+  in the main loop for the selected instance. cfw_init registers one feature listener for both modes
+  (`feat_changed`) to save a slot. **Status: built, host-tested, not yet tested on hardware.**
 
 ## Patches
 

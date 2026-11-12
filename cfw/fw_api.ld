@@ -16,6 +16,9 @@ PROVIDE(g_scale_intervals  = 0x08031DE0);
 
 /* main loop / UI */
 PROVIDE(confstore_poll     = 0x08016FEE | 1);
+PROVIDE(confstore_register = 0x08016E7A | 1);
+PROVIDE(confstore_add_loaded_cb = 0x08016F7E | 1);
+PROVIDE(confstore_mark_dirty = 0x08016F9E | 1);
 PROVIDE(disp_set_screen    = 0x080185C0 | 1);
 PROVIDE(disp_text          = 0x0801867C | 1);
 PROVIDE(ui_popup_begin     = 0x08024F5E | 1);

@@ -56,8 +56,9 @@ uint32_t cfw_boot_version(char *buf, uint32_t pos, uint32_t size, const uint32_t
 
 /* ---- input dispatchers: replace the stock ones (see cfw/hooks.txt) ---- */
 
-/* Turing Machine mode first; what it passes on may belong to the step sequencer
- * (seq_mode.c) or the CC pages (cc_pages.c). */
+/* Turing Machine mode first; what it passes on may belong to the step sequencers
+ * (seq_mode.c: buttons, pads and, in their pad modes, the encoders) or the CC pages
+ * (cc_pages.c). */
 static int io_event(int list, uint32_t id, uint32_t v)
 {
     int r = tm_io_event(list, id, v);
@@ -68,7 +69,7 @@ static int io_event(int list, uint32_t id, uint32_t v)
 
 static int enc_event(int list, uint32_t id, int32_t d)
 {
-    return tm_enc_event(list, id, d) || ccp_enc_event(list, id, d);
+    return tm_enc_event(list, id, d) || seq_enc_event(list, id, d) || ccp_enc_event(list, id, d);
 }
 
 typedef void (*io2_fn)(uint32_t, uint32_t);

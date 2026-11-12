@@ -32,6 +32,9 @@
 0x08016e7a confstore_register
 0x08016f7e confstore_add_loaded_cb
 0x08016f9e confstore_mark_dirty
+0x08016fce confstore_mark_dirty_ptr
+0x0802c944 extdata_scan_poll
+0x0802cbd0 extdata_flash_poll
 0x08016fee confstore_poll
 0x08026cac feat_on_store_loaded
 0x08026cf2 feat_store_init
