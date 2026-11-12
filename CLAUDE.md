@@ -37,7 +37,8 @@ details belong here and in `analysis/NOTES.md`.
   `cfw/test/test_seq_*.c`): SH-101 style step entry (Record, keys, Shift + Oct -/+ = rest / tie, Shift +
   Play = accent, pad = record position, Shift + Record = clear while recording, else clock source), Play,
   encoders (rate, direction, accent amount, first / last step, 3 CC lanes), clocked by MIDI note 24 on the
-  instance's channel or by the MIDI clock, stored in the settings store (NOTES "Settings store"). MIDI input path, key
+  instance's channel or by the MIDI clock, MIDI Start / Stop received and sent, stored in the settings store
+  (NOTES "Settings store"). MIDI input path, key
   and button ids: NOTES "MIDI input, keys and buttons" and "Step sequencers".
 - CC pages = encoder mode Custom 1 with 12 pages of CCs (`cfw/cc_pages.c`, host test `cfw/test/test_cc_pages.c`);
   stock page handling and the three hooks: NOTES "Encoder pages".

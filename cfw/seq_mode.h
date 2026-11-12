@@ -12,6 +12,8 @@ int seq_io_event(int list, uint32_t id);
 int seq_enc_event(int list, uint32_t id, int32_t delta);
 /* Listener for the stock note-out list (inmidi_add_out_listener). */
 void seq_note_out(uint32_t ctl, uint32_t group, uint32_t number, uint32_t value);
+/* MIDI Start / Continue (1) or Stop (0) was received. */
+void seq_transport(int start);
 /* Channel message from the MIDI port; 1 = consumed (clock note). */
 int seq_midi_rx(uint32_t status, uint32_t d1, uint32_t d2);
 

@@ -27,3 +27,8 @@
 
 # MIDI in: clock note for the step sequencer (cfw/seq_mode.c)
 0x0803049a  bl  cfw_midi_rx        01f086f9   # was: bl midi_port_rx_notes (MIDI port message handler 0x0803048C)
+
+# MIDI in: Start / Continue / Stop start and stop the step sequencers (midi_rx_realtime 0x08030958)
+0x08030968  bl  cfw_rt_start       e3f753f9   # was: bl clock_rt_start
+0x08030972  bl  cfw_rt_continue    e3f757f9   # was: bl clock_rt_continue
+0x0803097c  bl  cfw_rt_stop        e3f74df9   # was: bl clock_rt_stop

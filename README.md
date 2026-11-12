@@ -91,7 +91,7 @@ Custom 4, Drum or DAW), so all three can run at once.
 | **Shift + Play** | While recording: **accent** on / off for the *edit step* (see below). Accented notes play at velocity 127. |
 | **Pads** | While recording: press a pad to continue recording **from that step**, e.g. to change single notes. Any step of the sequence or the first step after it can be chosen. |
 | **Shift + Record** | While recording: **reset**, empties the sequence. Otherwise: switches the **clock** between the clock note and the MIDI clock. |
-| **Play** | Start / stop playback. |
+| **Play** | Start / stop playback. Sends **MIDI Start** when the first of the three sequencers starts and **MIDI Stop** when the last one stops. |
 
 The **edit step** is the step you entered last, or, right after pressing Record or a pad, the step
 at the record position. Accent and controller values go to that step. Entering notes only
@@ -144,6 +144,17 @@ A pad selects a step on the page shown; to reach the second page, enter steps un
   starts with step 1 right away, the rate is set with encoder 1, notes last half a step. The
   clock note is ignored in this setting. Rates that do not divide the 24 clock ticks per
   quarter note evenly (x5, x7 ...) are slightly uneven.
+
+### MIDI Start / Stop
+
+- **Received** (over USB, either port): MIDI Start or Continue starts every sequencer that has
+  a sequence and is stopped, in any pad mode; MIDI Stop stops all of them. A sequencer that is
+  recording is left alone. With the MIDI clock, step 1 plays on the first clock after Start.
+- **Sent** (USB MIDI port and TRS MIDI out): the Play button sends MIDI Start when it starts
+  the first sequencer and MIDI Stop when it stops the last one. Sequencers started from
+  outside send nothing.
+- If your DAW echoes the Launchkey's MIDI back to it, the Start sent by Play comes back and
+  starts the other sequencers too; switch the echo (MIDI thru) off for that port.
 
 ### Other
 

@@ -96,6 +96,9 @@
 0x08013c60 clock_poll
 0x08013bc6 clock_tick_counter_ptr
 0x08013c50 clock_ext_tick
+0x08013c12 clock_rt_start
+0x08013c24 clock_rt_continue
+0x08013c1a clock_rt_stop
 0x08014492 clock_out_poll
 0x20000104 g_clock                       data
 0x20000124 g_clock_ticks                 data

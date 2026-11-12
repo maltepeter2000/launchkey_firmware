@@ -19,7 +19,8 @@
  *                  yellow tie, orange accented note, dark red accented tie, off = rest;
  *                  white = step playing, pulsing = record position. While recording a pad
  *                  press moves the record position to its step
- *   Play           starts / stops playback (ends recording)
+ *   Play           starts / stops playback (ends recording). Sends MIDI Start when the
+ *                  first sequencer starts and MIDI Stop when the last one stops
  *   encoder 1      MIDI clock rate: /7 .. /1.5, x1 (= 1/16), x1.5 .. x7
  *   encoder 2      direction: forward, reverse, alternate, random
  *   encoder 3      accent amount: plain notes play at velocity 127 - amount (100..120)
@@ -34,6 +35,8 @@
  * the gate, not before a tie; received on the MIDI port (USB) on the sequencer's channel, or
  * played on the keys for the selected sequencer), or the 24 PPQN clock counter (internal
  * tempo or external MIDI clock) divided by the rate, gate = half a step.
+ * MIDI Start / Continue received on USB start every stopped sequencer that has a sequence,
+ * MIDI Stop stops all (seq_transport, called from the hooks in cfw_init.c).
  * Notes go out on the MIDI port (USB + DIN/TRS). Sequences and settings are stored in the
  * settings store (one record per sequencer, see NOTES "Settings store"). Leaving a
  * sequencer's pad mode ends its recording; its playback goes on.
@@ -371,8 +374,24 @@ static void clock(seq_t *s, int on)
     send(s, &out);
 }
 
-/* Starts playback; with the MIDI clock the first step plays right away. */
-static int play(seq_t *s)
+static int playing_count(void)
+{
+    int n = 0;
+    for (int i = 0; i < SEQ_COUNT; i++)
+        n += seqs[i].state == SEQ_PLAYING;
+    return n;
+}
+
+/* MIDI Start / Stop (0xFA / 0xFC) on the MIDI port. */
+static void send_realtime(uint32_t status)
+{
+    if (g_app_ports[MIDI_PORT])
+        midi_send3(g_app_ports[MIDI_PORT], status, 0, 0);
+}
+
+/* Starts playback. With the MIDI clock the first step plays right away (now = 1) or with
+ * the next clock tick (now = 0: started by a MIDI Start, whose first clock is the downbeat). */
+static int play(seq_t *s, int now)
 {
     seq_out_t out;
     int ok = seq_play_start(s, &out);
@@ -381,11 +400,31 @@ static int play(seq_t *s)
     if (!s->rng)
         s->rng = 1;
     if (ok && s->d->sync) {
-        run[index_of(s)].acc = 0;
-        run[index_of(s)].gate = 1;
-        clock(s, 1);
+        const uint8_t *rate = rate_tab[s->d->rate];
+        run[index_of(s)].acc = now ? 0 : (uint8_t)(rate[1] * STEP_TICKS - rate[0]);
+        run[index_of(s)].gate = (uint8_t)now;
+        if (now)
+            clock(s, 1);
     }
     return ok;
+}
+
+/* MIDI Start / Continue (start = 1) or Stop (0) was received: starts every sequencer that
+ * has a sequence and is neither playing nor recording, or stops every one that plays. */
+void seq_transport(int start)
+{
+    seq_out_t out;
+    for (int i = 0; i < SEQ_COUNT; i++) {
+        seq_t *s = &seqs[i];
+        if (start ? s->state != SEQ_STOPPED || !play(s, 0) : s->state != SEQ_PLAYING)
+            continue;
+        if (!start) {
+            seq_stop(s, &out);
+            send(s, &out);
+        }
+        if (s == seq)
+            update(start ? SHOW_PLAY : SHOW_STOP);
+    }
 }
 
 /* Steps the sequencers that follow the MIDI clock (all of them, selected or not). */
@@ -489,7 +528,7 @@ static void pressed(uint32_t id)
         } else if (st.shift) {
             seq->d->sync = !seq->d->sync;
             if (seq->state == SEQ_PLAYING)
-                play(seq);      /* from the start with the new clock */
+                play(seq, 1);   /* from the start with the new clock */
             dirty(seq);
             update(SHOW_SYNC);
         } else if (seq->state == SEQ_RECORDING) {
@@ -514,9 +553,13 @@ static void pressed(uint32_t id)
         } else if (seq->state == SEQ_PLAYING) {
             seq_stop(seq, &out);
             send(seq, &out);
+            if (!playing_count())
+                send_realtime(0xFC);    /* the last one stopped: MIDI Stop */
             update(SHOW_STOP);
         } else {
-            update(play(seq) ? SHOW_PLAY : SHOW_EMPTY);
+            if (seq->d->len && !playing_count())
+                send_realtime(0xFA);    /* the first one starts: MIDI Start */
+            update(play(seq, 1) ? SHOW_PLAY : SHOW_EMPTY);
         }
         break;
     case CTL_OCT_DOWN:

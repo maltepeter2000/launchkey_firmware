@@ -56,6 +56,9 @@ PROVIDE(g_relin_list_step  = 0x2000F238);
 
 /* clock: free-running 24 PPQN tick counter (internal tempo or external MIDI clock) */
 PROVIDE(g_clock_ticks      = 0x20000124);
+PROVIDE(clock_rt_start     = 0x08013C12 | 1);
+PROVIDE(clock_rt_continue  = 0x08013C24 | 1);
+PROVIDE(clock_rt_stop      = 0x08013C1A | 1);
 PROVIDE(ctl_is_blocked     = 0x08016058 | 1);
 
 /* inputrelative's io listeners (turn raw encoder events into relin events) */

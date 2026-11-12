@@ -270,7 +270,13 @@ Static analysis for the step sequencer; nothing in this section is confirmed on 
   selected instance plays, `seq_note_out` treats note 24 from a key as its clock.
 - MIDI clock (sync = 1): `run_clocks` (main loop, all instances) follows `g_clock_ticks` like the Turing
   Machine. Per tick acc += num; a step when acc >= 6 * den (rate table num/den, x1 = 6 ticks = 1/16), gate
-  off at half a period. Play starts with a step at once. Start / Stop / Continue messages are not used.
+  off at half a period. Play starts with a step at once.
+- MIDI Start / Continue / Stop: hooks on the three calls in `midi_rx_realtime` (0x08030968 FA ->
+  `clock_rt_start` 0x08013C12, 0x08030972 FB -> `clock_rt_continue` 0x08013C24, 0x0803097C FC ->
+  `clock_rt_stop` 0x08013C1A; both USB ports) call the stock function, then `seq_transport`: Start /
+  Continue start every stopped, non-empty instance (MIDI clock: acc is preset so the first tick plays
+  step 1), Stop stops the playing ones. The Play button sends FA with `midi_send3(g_app_ports[1], 0xFA, 0,
+  0)` (as the stock Play handler 0x08022710 does) when no instance was playing, FC when none is left.
 - Playback order: `seq_clock_on` plays `next` (planned at the previous clock, so the gate end knows whether
   a tie follows) within start..len-1; directions forward, reverse, alternate (end steps once), random
   (xorshift16). Output order: note offs, controllers of the step, note ons (accent 127, else 127 - amount).

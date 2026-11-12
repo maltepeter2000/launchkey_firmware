@@ -27,6 +27,8 @@ static char field[2][32];
 #define MAX_SENT 128
 static uint32_t sent[MAX_SENT][3];
 static int n_sent;
+static uint32_t rt[16];                     /* realtime messages (MIDI Start / Stop) */
+static int n_rt;
 
 /* settings store */
 static struct { uint32_t key; seq_data_t *buf; uint32_t size, delay; int dirty; } store[4];
@@ -53,6 +55,11 @@ void disp_text(uint32_t screen, uint32_t f, const char *str)
 void midi_send3(midi_port_t *port, uint32_t status, uint32_t d1, uint32_t d2)
 {
     CHECK(port == g_app_ports[1] && n_sent < MAX_SENT);
+    if (status >= 0xF8) {                   /* kept apart from notes and controllers */
+        CHECK(d1 == 0 && d2 == 0);
+        rt[n_rt++ & 15] = status;
+        return;
+    }
     if (n_sent < MAX_SENT) {
         sent[n_sent][0] = status; sent[n_sent][1] = d1; sent[n_sent][2] = d2;
         n_sent++;
@@ -661,9 +668,83 @@ int main(void)
         tap(PLAY);
     }
 
+    /* ---- MIDI Start / Stop ---- */
+    /* now: sequencer 1 (3 steps: 60, tie, accented 62; MIDI clock) stopped, 2 (2 steps, clock
+     * note) playing, 3 (1 step, clock note) stopped; Custom 1 selected */
+    n_rt = 0;
+    tap(PLAY);                                                    /* 2 plays already: no Start */
+    CHECK(n_sent == 3 && sent_is(2, 0x90, 60, 120));
+    tap(PLAY);                                                    /* 2 still plays: no Stop */
+    CHECK(n_sent == 4 && sent_is(3, 0x80, 60, 0) && n_rt == 0);
+    seq_mode_poll();
+    n_sent = 0;
+    {
+        int pops = n_popup;
+        seq_transport(0);                                         /* received Stop: all stop */
+        CHECK(n_sent == 1 && sent_is(0, 0x81, 74, 0) && clock_on(1) == 0);
+        seq_transport(0);
+        seq_mode_poll();
+        CHECK(n_sent == 1 && n_popup == pops && n_rt == 0);       /* 1 was stopped: no popup */
+    }
+    n_sent = 0;
+    tap(PLAY);                                                    /* first one: MIDI Start */
+    CHECK(n_sent == 1 && sent_is(0, 0x90, 60, 120) && n_rt == 1 && rt[0] == 0xFA);
+    tap(PLAY);                                                    /* last one: MIDI Stop */
+    CHECK(n_sent == 2 && sent_is(1, 0x80, 60, 0) && n_rt == 2 && rt[1] == 0xFC);
+    set_feat(PAD_MODE, 6);
+    tap(RECORD);
+    shift_tap(RECORD, TM_CONSUME);                                /* empty sequencer 2 ... */
+    tap(RECORD);
+    tap(PLAY);
+    CHECK(text_is("Empty") && n_rt == 2);                         /* nothing to play: no Start */
+    tap(RECORD);                                                  /* ... and enter it again */
+    key(0, 72);
+    key(1, 74);
+    tap(RECORD);
+    set_feat(PAD_MODE, 5);
+    n_sent = 0;
+    seq_transport(1);                                             /* received Start: all three */
+    CHECK(n_sent == 0 && text_is("Play") && n_rt == 2);           /* nothing sent or played yet */
+    ticks(1);                                                     /* the first clock is step 1 */
+    CHECK(n_sent == 1 && sent_is(0, 0x90, 60, 120) && led_rgb[0] == WHITE);
+    ticks(5);
+    CHECK(n_sent == 1);                                           /* a tie follows */
+    ticks(1);
+    CHECK(n_sent == 1 && led_rgb[1] == WHITE);
+    CHECK(clock_on(1) == 1 && clock_on(2) == 1 && clock_on(0) == 0);
+    CHECK(sent_is(n_sent - 2, 0x91, 72, 100) && sent_is(n_sent - 1, 0x92, 36, 100));
+    seq_transport(1);                                             /* playing ones are left alone */
+    ticks(5);
+    CHECK(led_rgb[1] == WHITE);
+    tap(PLAY);                                                    /* others still play: no Stop */
+    CHECK(text_is("Stop") && n_rt == 2);
+    tap(RECORD);
+    seq_transport(1);                                             /* a recording is not interrupted */
+    seq_transport(0);
+    CHECK(text_is("Rec step 1") && sent_is(n_sent - 1, 0x82, 36, 0));
+    key(0, 60);
+    CHECK(text_is("1: Note 60"));
+    tap(RECORD);
+    set_feat(PAD_MODE, 8);
+    seq_transport(1);                                             /* in any pad mode */
+    ticks(1);
+    CHECK(sent_is(n_sent - 1, 0x90, 60, 120));
+    seq_transport(0);
+    CHECK(sent_is(n_sent - 1, 0x80, 60, 0) && clock_on(1) == 0);
+    {
+        seq_data_t *d = store[2].buf;                             /* an empty one is not started */
+        uint8_t len = d->len;
+        d->len = 0;
+        seq_transport(1);
+        CHECK(clock_on(2) == 0 && clock_on(1) == 1);
+        d->len = len;
+        seq_transport(0);
+    }
+    CHECK(n_rt == 2);
+
     /* the three sequences are independent */
     set_feat(PAD_MODE, 6);
-    CHECK(text_is("2 steps, play") && led_rgb[2] == 0);
+    CHECK(text_is("2 steps") && led_rgb[2] == 0);
     set_feat(PAD_MODE, 7);
     CHECK(text_is("1 step") && led_rgb[0] == YELLOW && led_rgb[1] == 0);
 

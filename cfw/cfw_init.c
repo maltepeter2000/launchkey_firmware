@@ -47,6 +47,26 @@ uint32_t cfw_midi_rx(midi_port_t *port, uint32_t status, uint32_t d1, uint32_t d
     return midi_port_rx_notes(port, status, d1, d2);
 }
 
+/* Hooks: replace the calls for MIDI Start / Continue / Stop in midi_rx_realtime (0x08030968,
+ * 0x08030972, 0x0803097C; both USB ports end up there). The stock clock still gets them. */
+void cfw_rt_start(void)
+{
+    clock_rt_start();
+    seq_transport(1);
+}
+
+void cfw_rt_continue(void)
+{
+    clock_rt_continue();
+    seq_transport(1);
+}
+
+void cfw_rt_stop(void)
+{
+    clock_rt_stop();
+    seq_transport(0);
+}
+
 /* Hook: replaces `bl fmt_version` in ui_show_boot_screen (0x08016E42). Visible proof that cave code runs. */
 uint32_t cfw_boot_version(char *buf, uint32_t pos, uint32_t size, const uint32_t *ver)
 {

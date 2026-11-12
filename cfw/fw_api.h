@@ -124,6 +124,12 @@ void led_override(uint32_t id, uint32_t mode);
  * internal tempo (period in us at 0x20000114) or counted external MIDI clocks. Poll it from
  * the main loop and step on the difference, like the MIDI Clock Out sender (0x08014492). */
 extern volatile uint32_t g_clock_ticks;
+/* MIDI Start / Continue / Stop as received (called by midi_rx_realtime 0x08030958): Start and
+ * Continue set the clock's running flag and switch it to external sync, Stop clears the flag.
+ * The tick counter is not reset. */
+void clock_rt_start(void);
+void clock_rt_continue(void);
+void clock_rt_stop(void);
 
 /* Encoder layouts and pages (see NOTES "Encoder pages"). g_enc_layout: 2..5 = Plugin, Mixer,
  * Sends, Transport, 6..9 = Custom 1..4. g_enc_page[n] = page of Custom n+1 (stock: 0 or 1). */
