@@ -96,7 +96,7 @@ def main():
     ap.add_argument("out")
     ap.add_argument("patches", nargs="*", type=Path)
     ap.add_argument("--meta", type=Path, help="stock .bin.json; writes <out>.json with the new version")
-    a = ap.parse_args()
+    a = ap.parse_intermixed_args()   # --meta may come before the patch list (Python < 3.12.7)
 
     image = bytearray(Path(a.inp).read_bytes())
     for p in a.patches:

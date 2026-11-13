@@ -32,7 +32,7 @@
 - RAM (64 KiB): RW data 0x20000000..0x200015D0 (decompressed from the image end), zero-init
   0x200015D0..0x2000F518 (scatter table @0x08033544), leaves **2 792 bytes** up to 0x20010000 for the main stack
   (initial SP 0x2000FFF8). Any new feature must find RAM inside existing buffers or share that headroom.
-- cfw RAM: 0x2000F520..0x2000F8F0 (`cfw/cfw.ld`, 976 bytes, 968 used; 711 of them are the three step
+- cfw RAM: 0x2000F520..0x2000F8F0 (`cfw/cfw.ld`, 976 bytes, 960 used; 711 of them are the three step
   sequencer records). It was 256 bytes up to 0x2000F620 when the stack was measured (see "Stack" below), so
   the untouched stack area is now >= 752 bytes. More sequencer steps cost stack margin: 7 bytes per step
   and sequencer (48 steps would need two store records per sequencer and ~340 bytes more). The Turing
@@ -171,10 +171,13 @@
   type; type 2 looks like a plain CC 0..127, see 0x0801C7F6), `ctl_map_get(id)` @0x0801E1AA,
   `ctl_map_set(id, map)` @0x0801E1B8. Static analysis only: the value of an encoder seems to be kept per
   physical control, not per page (0x08015BBE rescales it when a mapping changes).
-- **cfw CC pages** (`cfw/cc_pages.c`, Custom 1 only): hooks replace enc_page_count (12 pages), the enc_set_page
+- **cfw CC pages** (`cfw/cc_pages.c`, Custom 1 only): hooks replace enc_page_count (11 pages), the enc_set_page
   call and the ui_show_enc_page call in the handler; encoder turns are taken in the relin dispatchers (after
-  the Turing Machine mode) and sent as CC 20 + page * 8 + encoder on channel 1 with `midi_send3`. Values:
-  96 bytes of cfw RAM. **Status: built, host-tested (`make cfw-test`), not yet tested on hardware.**
+  the Turing Machine mode) and sent with `midi_send3` on the **Keys Channel** (feature 0x64) as the CC of
+  `page_cc[page][encoder]` = the pages of the Pd controller layer (20..119 without 32 38 64-69 84 88 96-101,
+  page 11 has 4). Feedback: `cfw_midi_rx` calls `ccp_midi_rx` first (reads only), a CC on the keys channel
+  sets the value of its encoder. Sync request: CC 3 = 127 before the first CC on a new channel. Values: 88
+  bytes of cfw RAM (960 used). **Status: built, host-tested (`make cfw-test`), not yet tested on hardware.**
 
 ## MIDI input, keys and buttons (fw 1563)
 

@@ -17,17 +17,18 @@ uint32_t g_enc_page[4];
 static int port_obj;
 midi_port_t *g_app_ports[2] = {0, (midi_port_t *)&port_obj};
 
-static uint32_t shift, blocked_id = 0xFF;
+static uint32_t shift, keys_ch, blocked_id = 0xFF;
 static int n_refresh, n_nav_leds, n_popup_begin, n_stock_popup, n_stock_set, n_sent;
 static uint32_t stock_set_layout, stock_set_page, stock_popup_page;
 static uint32_t sent_status, sent_d1, sent_d2;
+static uint8_t sent_log[64][3]; static int n_log;
 static midi_port_t *sent_port;
 static char field[2][32];
 
 void confsys_get_param(uint32_t group, uint32_t id, fw_param_t *out)
 {
-    CHECK(group == FW_GROUP_FEATURE && id == 0x3F);
-    out->value = shift;
+    CHECK(group == FW_GROUP_FEATURE && (id == 0x3F || id == 0x64));
+    out->value = id == 0x3F ? shift : keys_ch;
     out->flags = 0;
 }
 uint32_t ctl_is_blocked(uint32_t id) { return id == blocked_id; }
@@ -47,14 +48,33 @@ void midi_send3(midi_port_t *port, uint32_t status, uint32_t d1, uint32_t d2)
 {
     n_sent++;
     sent_port = port; sent_status = status; sent_d1 = d1; sent_d2 = d2;
+    if (n_log < 64) { sent_log[n_log][0] = (uint8_t)status; sent_log[n_log][1] = (uint8_t)d1; sent_log[n_log][2] = (uint8_t)d2; n_log++; }
 }
 
 #define ENC(n) (56 + (n) - 1)       /* control id of encoder n (1..8) */
 
+/* the CC pages of the Pd controller layer: 20..119 without the reserved numbers */
+static int reserved(int cc)
+{
+    return cc == 32 || cc == 38 || (cc >= 64 && cc <= 69) || cc == 84 || cc == 88 || (cc >= 96 && cc <= 101);
+}
+static int expect_cc(uint32_t pg, int e)        /* e = 0..7, 0 = none */
+{
+    int k = 0;
+    for (int cc = 20; cc < 120; cc++) {
+        if (reserved(cc))
+            continue;
+        if (k == (int)pg * 8 + e)
+            return cc;
+        k++;
+    }
+    return 0;
+}
+
 int main(void)
 {
     /* pages per encoder layout */
-    CHECK(cfw_enc_page_count(0) == 12 && cfw_enc_page_count(6) == 12);
+    CHECK(cfw_enc_page_count(0) == 11 && cfw_enc_page_count(6) == 11);
     CHECK(cfw_enc_page_count(7) == 2 && cfw_enc_page_count(8) == 2 && cfw_enc_page_count(9) == 2);
     for (uint32_t l = 1; l <= 5; l++)
         CHECK(cfw_enc_page_count(l) == 1);
@@ -68,7 +88,7 @@ int main(void)
     cfw_enc_set_page(6, 5);
     CHECK(n_refresh == 1);                      /* unchanged: no re-assignment */
     cfw_enc_set_page(0, 14);
-    CHECK(g_enc_page[0] == 11 && n_refresh == 2);
+    CHECK(g_enc_page[0] == 10 && n_refresh == 2);
     CHECK(g_enc_page[1] == 0 && g_enc_page[2] == 0 && g_enc_page[3] == 0);
 
     /* page popup */
@@ -76,13 +96,13 @@ int main(void)
     cfw_enc_page_popup(1);
     CHECK(n_stock_popup == 1 && stock_popup_page == 1 && n_nav_leds == 0);
     g_enc_layout = 6;
-    cfw_enc_page_popup(2);
+    cfw_enc_page_popup(1);
     CHECK(n_stock_popup == 1 && n_nav_leds == 1);
-    CHECK(!strcmp(field[0], "CC Page 3/12") && !strcmp(field[1], "CC 36 - 43"));
+    CHECK(!strcmp(field[0], "CC Page 2/11") && !strcmp(field[1], "CC 28 - 36"));
     cfw_enc_page_popup(0);
-    CHECK(!strcmp(field[0], "CC Page 1/12") && !strcmp(field[1], "CC 20 - 27"));
-    cfw_enc_page_popup(11);
-    CHECK(!strcmp(field[0], "CC Page 12/12") && !strcmp(field[1], "CC 108 - 115"));
+    CHECK(!strcmp(field[0], "CC Page 1/11") && !strcmp(field[1], "CC 20 - 27"));
+    cfw_enc_page_popup(10);
+    CHECK(!strcmp(field[0], "CC Page 11/11") && !strcmp(field[1], "CC 116 - 119"));
 
     /* encoders: only in Custom 1 */
     g_enc_page[0] = 0;
@@ -93,54 +113,88 @@ int main(void)
     g_enc_layout = 6;
     CHECK(ccp_enc_event(0, 55, 1) == 0 && ccp_enc_event(0, 64, 1) == 0 && n_sent == 0);
 
+    /* first turn: sync request (CC 3 = 127) on the keys channel, then the CC */
     CHECK(ccp_enc_event(0, ENC(1), 3) == 1);
-    CHECK(n_sent == 1 && sent_port == g_app_ports[1] && sent_status == 0xB0 && sent_d1 == 20 && sent_d2 == 3);
-    CHECK(!strcmp(field[0], "P1  CC 20") && !strcmp(field[1], "3") && n_popup_begin == 1);
-    CHECK(ccp_enc_event(0, ENC(1), 0xFFFF) == 1);       /* -1 arrives as u16 */
-    CHECK(n_sent == 2 && sent_d1 == 20 && sent_d2 == 2);
+    CHECK(n_sent == 2 && n_log == 2 && sent_log[0][0] == 0xB0 && sent_log[0][1] == 3 && sent_log[0][2] == 127);
+    CHECK(sent_port == g_app_ports[1] && sent_status == 0xB0 && sent_d1 == 20 && sent_d2 == 3);
+    CHECK(!strcmp(field[0], "P1 Ch1 CC20") && !strcmp(field[1], "3") && n_popup_begin == 1);
+    n_sent = 0;
+    CHECK(ccp_enc_event(0, ENC(1), 0xFFFF) == 1);       /* -1 arrives as u16; no second sync */
+    CHECK(n_sent == 1 && sent_d1 == 20 && sent_d2 == 2);
     CHECK(ccp_enc_event(0, ENC(1), -50) == 1);
-    CHECK(n_sent == 3 && sent_d2 == 0);
-    CHECK(ccp_enc_event(0, ENC(1), -1) == 1 && n_sent == 3);    /* at the limit: nothing sent */
+    CHECK(n_sent == 2 && sent_d2 == 0);
+    CHECK(ccp_enc_event(0, ENC(1), -1) == 1 && n_sent == 2);    /* at the limit: nothing sent */
     CHECK(ccp_enc_event(0, ENC(8), 200) == 1);
-    CHECK(n_sent == 4 && sent_d1 == 27 && sent_d2 == 127);
-    CHECK(ccp_enc_event(0, ENC(8), 1) == 1 && n_sent == 4);
+    CHECK(n_sent == 3 && sent_d1 == 27 && sent_d2 == 127);
+    CHECK(ccp_enc_event(0, ENC(8), 1) == 1 && n_sent == 3);
 
     /* the other turn lists are swallowed without sending */
-    CHECK(ccp_enc_event(1, ENC(2), 1) == 1 && ccp_enc_event(2, ENC(2), 1) == 1 && n_sent == 4);
+    CHECK(ccp_enc_event(1, ENC(2), 1) == 1 && ccp_enc_event(2, ENC(2), 1) == 1 && n_sent == 3);
 
     /* Shift + encoder and encoders captured by a menu stay with the stock firmware */
     shift = 127;
-    CHECK(ccp_enc_event(0, ENC(2), 1) == 0 && n_sent == 4);
+    CHECK(ccp_enc_event(0, ENC(2), 1) == 0 && n_sent == 3);
     shift = 0;
     blocked_id = ENC(2);
-    CHECK(ccp_enc_event(0, ENC(2), 1) == 0 && n_sent == 4);
-    CHECK(ccp_enc_event(0, ENC(3), 1) == 1 && n_sent == 5 && sent_d1 == 22);
+    CHECK(ccp_enc_event(0, ENC(2), 1) == 0 && n_sent == 3);
+    CHECK(ccp_enc_event(0, ENC(3), 1) == 1 && n_sent == 4 && sent_d1 == 22);
     blocked_id = 0xFF;
 
-    /* every page has its own CCs and remembers its values */
-    cfw_enc_set_page(6, 11);
-    CHECK(ccp_enc_event(0, ENC(8), 64) == 1);
-    CHECK(sent_d1 == 115 && sent_d2 == 64 && !strcmp(field[0], "P12  CC 115") && !strcmp(field[1], "64"));
+    /* every page has its own CCs and remembers its values; page 11 has 4 */
+    cfw_enc_set_page(6, 10);
+    CHECK(ccp_enc_event(0, ENC(4), 64) == 1);
+    CHECK(sent_d1 == 119 && sent_d2 == 64 && !strcmp(field[0], "P11 Ch1 CC119") && !strcmp(field[1], "64"));
+    n_sent = 0;
+    CHECK(ccp_enc_event(0, ENC(5), 5) == 1 && n_sent == 0 && !strcmp(field[0], "P11 Ch1") && !strcmp(field[1], "-"));
     cfw_enc_set_page(6, 0);
     CHECK(ccp_enc_event(0, ENC(8), -27) == 1);
     CHECK(sent_d1 == 27 && sent_d2 == 100);
-    cfw_enc_set_page(6, 11);
-    CHECK(ccp_enc_event(0, ENC(8), 1) == 1);
-    CHECK(sent_d1 == 115 && sent_d2 == 65);
+    cfw_enc_set_page(6, 10);
+    CHECK(ccp_enc_event(0, ENC(4), 1) == 1);
+    CHECK(sent_d1 == 119 && sent_d2 == 65);
 
     uint8_t seen[128] = {0};
-    for (uint32_t pg = 0; pg < 12; pg++) {
+    int n_cc = 0;
+    for (uint32_t pg = 0; pg < 11; pg++) {
         cfw_enc_set_page(6, pg);
         for (int e = 1; e <= 8; e++) {
             n_sent = 0;
-            ccp_enc_event(0, ENC(e), pg == 11 && e == 8 ? -1 : 1);
-            CHECK(n_sent == 1 && sent_d1 == 20 + pg * 8 + (uint32_t)(e - 1) && sent_d1 < 128 && !seen[sent_d1 & 127]);
-            seen[sent_d1 & 127] = 1;
+            ccp_enc_event(0, ENC(e), 1);
+            ccp_enc_event(0, ENC(e), -1);
+            int want = pg == 10 && e > 4 ? 0 : expect_cc(pg, e - 1);
+            if (!want) {
+                CHECK(n_sent == 0);
+                continue;
+            }
+            CHECK(n_sent >= 1 && sent_d1 == (uint32_t)want && !seen[want]);
+            seen[want] = 1;
+            n_cc++;
         }
     }
+    CHECK(n_cc == 84);
     for (int cc = 0; cc < 128; cc++)
-        CHECK(seen[cc] == (cc >= 20 && cc <= 115));
+        CHECK(seen[cc] == (cc >= 20 && cc <= 119 && !reserved(cc)));
 
+    /* feedback: a CC on the keys channel sets the encoder, other channels and CCs do nothing */
+    cfw_enc_set_page(6, 1);
+    CHECK(ccp_midi_rx(0xB0, 29, 90) == 0);              /* page 2, encoder 2 */
+    CHECK(ccp_midi_rx(0xB1, 30, 90) == 0);              /* other channel */
+    CHECK(ccp_midi_rx(0x90, 31, 90) == 0);              /* a note */
+    CHECK(ccp_midi_rx(0xB0, 32, 90) == 0);              /* not on a page */
+    n_sent = 0;
+    CHECK(ccp_enc_event(0, ENC(2), 1) == 1 && n_sent == 1 && sent_d1 == 29 && sent_d2 == 91);
+    CHECK(ccp_enc_event(0, ENC(3), 1) == 1 && sent_d1 == 30 && sent_d2 == 1);
+    CHECK(ccp_enc_event(0, ENC(4), 1) == 1 && sent_d1 == 31 && sent_d2 == 1);
+
+    /* keys channel changed: the next turn asks again (CC 3 on the new channel), CCs follow it */
+    keys_ch = 4;
+    n_log = 0; n_sent = 0;
+    CHECK(ccp_midi_rx(0xB4, 33, 50) == 0);
+    CHECK(ccp_enc_event(0, ENC(5), 1) == 1);
+    CHECK(n_log == 2 && sent_log[0][0] == 0xB4 && sent_log[0][1] == 3 && sent_log[1][0] == 0xB4
+          && sent_log[1][1] == 33 && sent_log[1][2] == 51);
+    CHECK(!strcmp(field[0], "P2 Ch5 CC33"));
+    keys_ch = 0;
     /* raw encoder events: owned from press to release, even if the mode changes in between */
     g_enc_layout = 6;
     CHECK(ccp_io_event(0, 3) == TM_PASS && ccp_io_event(0, 36) == TM_PASS);    /* pad, down button */

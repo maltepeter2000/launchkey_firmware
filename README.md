@@ -8,7 +8,7 @@ firmware version 1.3 build 1563. It adds:
 - **Step sequencers** – three SH-101 style step sequencers on pad modes Custom 1, 2 and 3 (MIDI channels
   1, 2 and 3): up to four notes, an accent and three controller values per step, clocked by a MIDI note or
   the MIDI clock, saved at power-off
-- **CC pages** – encoder mode Custom 1 has 12 pages of 8 CCs (CC 20–115) instead of 2
+- **CC pages** – encoder mode Custom 1 has the 11 CC pages of the Pd controller layer (CC 20–119 without reserved numbers) on the keys channel, with feedback from Pd, instead of 2
 - **Scale memory** – the scale (on/off, type, root note, mode) is restored at power-on
 - A **CFW badge** on the boot logo, and the version shown at boot gets a `+cfw` suffix
 
@@ -178,12 +178,45 @@ A pad selects a step on the page shown; to reach the second page, enter steps un
 
 > **Not yet tested on hardware.** Built and host-tested (`make cfw-test`) only.
 
-Select encoder mode **Custom 1** as usual (hold Shift and press the 5th pad of the top row). The
-**up / down buttons** next to the encoders step through **12 pages** instead of 2; the display
-shows the page and its CCs, and the button LEDs show whether there is a page above or below.
+Made for the controller layer of Peter's Pd instruments (`tools/ctlayer.py` in PDoly800): **one MIDI
+channel per instrument, the same CC pages for every instrument.** Select encoder mode **Custom 1**
+as usual (hold Shift and press the 5th pad of the top row). The **up / down buttons** next to the
+encoders step through **11 pages**; the display shows the page and its CCs, and the button LEDs
+show whether there is a page above or below.
 
 | Page | Encoders 1–8 send |
 | --- | --- |
+| 1 | CC 20–27 |
+| 2 | CC 28 29 30 31 33 34 35 36 |
+| 3 | CC 37 39 40 41 42 43 44 45 |
+| 4 | CC 46–53 |
+| 5 | CC 54–61 |
+| 6 | CC 62 63 70 71 72 73 74 75 |
+| 7 | CC 76–83 |
+| 8 | CC 85 86 87 89 90 91 92 93 |
+| 9 | CC 94 95 102 103 104 105 106 107 |
+| 10 | CC 108–115 |
+| 11 | CC 116–119 (encoders 5–8 send nothing) |
+
+Left out are the numbers with a fixed meaning: 32 and 38 (bank / data LSB), 64–69 (pedals),
+84 (portamento control), 88 (high-res velocity), 96–101 (data increment, NRPN, RPN).
+
+- **Channel = the Keys Channel.** The encoders send on the same MIDI channel as the keys, so
+  changing the keys channel switches the instrument for both. Turning an encoder shows page,
+  channel, CC number and value.
+- **Feedback:** a CC on the keys channel that comes in on the MIDI port sets the value of the
+  encoder that sends it. When a preset changes in Pd, the Pd layer sends the new values back and
+  the next turn goes on from the right place – no jumps.
+- **Sync request:** the first turn after power-on or after changing the keys channel first sends
+  **CC 3 = 127** on that channel; the Pd layer answers with all its values.
+- **Every page remembers its eight values** (RAM only).
+- The assignments made for Custom 1 in Novation Components are not used while this firmware is
+  installed. Custom 2–4 and all other encoder modes work as before (2 pages).
+- Pages, sync CC and step size are at the top of `cfw/cc_pages.c`.
+- In pad mode Custom 4 (Turing Machine) encoders 1–7 belong to the Turing Machine; only
+  encoder 8 sends the CC of the current page.
+
+--- | --- |
 | 1 | CC 20–27 |
 | 2 | CC 28–35 |
 | 3 | CC 36–43 |

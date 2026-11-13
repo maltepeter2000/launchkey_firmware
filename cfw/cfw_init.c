@@ -42,6 +42,7 @@ void cfw_poll(void)
  * The sequencer takes its clock note; everything else goes to the stock handler. */
 uint32_t cfw_midi_rx(midi_port_t *port, uint32_t status, uint32_t d1, uint32_t d2)
 {
+    ccp_midi_rx(status, d1, d2);                 /* CC feedback for the CC pages, only reads */
     if (seq_midi_rx(status, d1, d2))
         return 1;
     return midi_port_rx_notes(port, status, d1, d2);

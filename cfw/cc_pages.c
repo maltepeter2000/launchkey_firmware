@@ -1,9 +1,19 @@
-/* CC pages: encoder mode Custom 1 gets CCP_PAGES pages of 8 CCs instead of the stock 2.
+/* CC pages: encoder mode Custom 1 gets the CC pages of the Pd controller layer (pdoly8 tools/ctlayer.py)
+ * instead of the stock 2 pages.
  *
  * Active while the encoder layout is Custom 1 (g_enc_layout = 6), Shift is up and no menu has
  * captured the encoder:
- *   encoders 1..8      CC (CCP_FIRST_CC + page * 8 + encoder) on channel CCP_CHANNEL, 0..127.
- *                      Every page remembers its eight values (RAM only, 0 after power-on).
+ *   encoders 1..8      the CCs of the page (page_cc), 0..127, on the Keys Channel (feature 0x64):
+ *                      one channel per instrument, so changing the keys channel switches the
+ *                      instrument for keys and encoders together. 20..119 without 32, 38, 64..69,
+ *                      84, 88, 96..101 (bank / data LSB, pedals, portamento control, high-res
+ *                      velocity, NRPN / RPN): 10 pages of 8 and page 11 with 4 (encoders 5..8 off).
+ *                      Every page remembers its eight values (RAM only).
+ *   feedback           a CC on the Keys Channel coming in on the MIDI port (from Pd: presets,
+ *                      editor) sets the value of its encoder, so the next turn goes on from there.
+ *   sync request       when the channel differs from the one used last (power-on, keys channel
+ *                      changed) the first turn sends CC 3 = 127 first: the Pd layer answers with all
+ *                      its values as CC, which land here as feedback.
  *   up / down buttons  previous / next page, handled by the stock firmware as before. Three
  *                      hooks (cfw/hooks.txt) widen it: cfw_enc_page_count reports CCP_PAGES
  *                      pages for Custom 1 (button LEDs and limits follow), cfw_enc_set_page
@@ -12,28 +22,43 @@
  * assignments of Custom 1 (Components) are not used while this is active; Custom 2..4 and
  * all other encoder modes are untouched.
  * The input dispatchers in cfw_init.c ask ccp_io_event / ccp_enc_event after the Turing
- * Machine mode has passed on an event, so in pad mode Custom 4 only encoder 8 lands here.
+ * Machine mode has passed on an event, so in pad mode Custom 4 only encoder 8 lands here;
+ * cfw_midi_rx asks ccp_midi_rx first (it only reads, the message goes on to the stock code).
  */
 #include <stdint.h>
 #include "fw_api.h"
 #include "tm_mode.h"
 #include "cc_pages.h"
 
-#define CCP_PAGES         12
-#define CCP_FIRST_CC      20          /* page 1 = CC 20..27, ... page 12 = CC 108..115 */
-#define CCP_CHANNEL       0           /* 0-based: 0 = MIDI channel 1 */
+#define CCP_PAGES         11
 #define CCP_STEP          1           /* value change per encoder tick */
+#define CCP_SYNC_CC       3           /* undefined in MIDI 1.0: "send me your values" for the Pd layer */
 
 #define ENC_FIRST         56          /* encoder 1 */
 #define ENC_COUNT         8
 #define ENC_LAYOUT_CUSTOM1 6
 #define FEAT_SHIFT        0x3F
+#define FEAT_KEYS_CHANNEL 0x64        /* 0-based */
 #define MIDI_PORT         1           /* g_app_ports[1] = USB MIDI port (+ DIN via link) */
 
-_Static_assert(CCP_FIRST_CC + CCP_PAGES * ENC_COUNT <= 120, "CCs 120..127 are channel mode messages");
+/* The pages of the Pd controller layer; 0 = no CC at this place. */
+static const uint8_t page_cc[CCP_PAGES][ENC_COUNT] = {
+    { 20,  21,  22,  23,  24,  25,  26,  27},
+    { 28,  29,  30,  31,  33,  34,  35,  36},
+    { 37,  39,  40,  41,  42,  43,  44,  45},
+    { 46,  47,  48,  49,  50,  51,  52,  53},
+    { 54,  55,  56,  57,  58,  59,  60,  61},
+    { 62,  63,  70,  71,  72,  73,  74,  75},
+    { 76,  77,  78,  79,  80,  81,  82,  83},
+    { 85,  86,  87,  89,  90,  91,  92,  93},
+    { 94,  95, 102, 103, 104, 105, 106, 107},
+    {108, 109, 110, 111, 112, 113, 114, 115},
+    {116, 117, 118, 119,   0,   0,   0,   0},
+};
 
 static uint8_t value[CCP_PAGES][ENC_COUNT];
 static uint8_t owned;                 /* encoders whose current touch belongs to this mode */
+static uint8_t last_ch;               /* channel + 1 of the last CC sent, 0 = none yet */
 
 /* ---- helpers ---- */
 
@@ -124,10 +149,13 @@ void cfw_enc_page_popup(uint32_t new_page)
     if (new_page >= CCP_PAGES)
         new_page = CCP_PAGES - 1;
     char title[20], text[20], *p;
-    uint32_t cc = CCP_FIRST_CC + new_page * ENC_COUNT;
+    const uint8_t *cc = page_cc[new_page];
+    int last = ENC_COUNT - 1;
+    while (last > 0 && !cc[last])
+        last--;
     p = put_num(put_str(put_num(put_str(title, "CC Page "), new_page + 1), "/"), CCP_PAGES);
     *p = 0;
-    p = put_num(put_str(put_num(put_str(text, "CC "), cc), " - "), cc + ENC_COUNT - 1);
+    p = put_num(put_str(put_num(put_str(text, "CC "), cc[0]), " - "), cc[last]);
     *p = 0;
     disp_set_screen(1, 0);              /* same sequence as the stock page popup */
     disp_text(1, 0, title);
@@ -137,12 +165,25 @@ void cfw_enc_page_popup(uint32_t new_page)
 
 /* ---- input (called from the dispatchers in cfw_init.c) ---- */
 
-static void show_value(uint32_t pg, uint32_t enc)
+static uint32_t channel(void)
+{
+    fw_param_t p;
+    confsys_get_param(FW_GROUP_FEATURE, FEAT_KEYS_CHANNEL, &p);
+    return p.value & 15;
+}
+
+static void show_value(uint32_t pg, uint32_t enc, uint32_t ch)
 {
     char title[20], text[8], *p;
-    p = put_num(put_str(put_num(put_str(title, "P"), pg + 1), "  CC "), CCP_FIRST_CC + pg * ENC_COUNT + enc);
-    *p = 0;
-    p = put_num(text, value[pg][enc]);
+    p = put_num(put_str(put_num(put_str(title, "P"), pg + 1), " Ch"), ch + 1);
+    if (page_cc[pg][enc]) {
+        p = put_num(put_str(p, " CC"), page_cc[pg][enc]);
+        *p = 0;
+        p = put_num(text, value[pg][enc]);
+    } else {
+        *p = 0;
+        p = put_str(text, "-");
+    }
     *p = 0;
     ui_popup_begin();
     disp_set_screen(1, 0);
@@ -175,15 +216,36 @@ int ccp_enc_event(int list, uint32_t id, int32_t delta)
         return 0;
     if (list != 0)
         return 1;
-    uint32_t pg = page(), enc = id - ENC_FIRST;
+    uint32_t pg = page(), enc = id - ENC_FIRST, ch = channel();
+    uint32_t cc = page_cc[pg][enc];
     int v = value[pg][enc] + delta * CCP_STEP;
     v = v < 0 ? 0 : v > 127 ? 127 : v;
-    if (v != value[pg][enc]) {
+    midi_port_t *port = g_app_ports[MIDI_PORT];
+    if (cc && v != value[pg][enc]) {
         value[pg][enc] = (uint8_t)v;
-        if (g_app_ports[MIDI_PORT])
-            midi_send3(g_app_ports[MIDI_PORT], 0xB0 | CCP_CHANNEL,
-                       CCP_FIRST_CC + pg * ENC_COUNT + enc, (uint32_t)v);
+        if (port) {
+            if (last_ch != ch + 1) {                /* new channel: ask the Pd layer for its values */
+                midi_send3(port, 0xB0 | ch, CCP_SYNC_CC, 127);
+                last_ch = (uint8_t)(ch + 1);
+            }
+            midi_send3(port, 0xB0 | ch, cc, (uint32_t)v);
+        }
     }
-    show_value(pg, enc);
+    show_value(pg, enc, ch);
     return 1;
+}
+
+/* MIDI port input (from cfw_midi_rx, before the stock handler): a CC on the Keys Channel sets
+ * the value of the encoder that sends it. Only reads: returns 0, the message goes on. */
+int ccp_midi_rx(uint32_t status, uint32_t d1, uint32_t d2)
+{
+    if ((status & 0xF0) != 0xB0 || d1 < 20 || d1 > 119 || d2 > 127 || (status & 15) != channel())
+        return 0;
+    for (uint32_t pg = 0; pg < CCP_PAGES; pg++)
+        for (uint32_t e = 0; e < ENC_COUNT; e++)
+            if (page_cc[pg][e] == d1) {
+                value[pg][e] = (uint8_t)d2;
+                return 0;
+            }
+    return 0;
 }
