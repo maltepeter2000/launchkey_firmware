@@ -150,3 +150,4 @@
 0x0803217c g_ctl_scan_types              data
 0x0803227c g_button_cc_table             data
 0x2000efb8 g_inmidi_out_listeners        data
+0x20008170 g_ctl_param data

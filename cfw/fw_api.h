@@ -32,6 +32,10 @@ uint32_t fmt_version(char *buf, uint32_t pos, uint32_t size, const uint32_t *ver
 /* Appends str to the NUL-terminated buf (bounded by size, always terminated); returns the new length. */
 uint32_t str_append(char *buf, uint32_t pos, uint32_t size, const char *str);
 
+/* Per-control output table (256 entries, control id -> confsys param of its MIDI output, see
+ * NOTES "Drum pads"); filled by the layouts, read by ctl_out_note. */
+extern uint32_t g_ctl_param[256];
+
 /* 30 x 12 bytes, index = scale type (1..30); non-zero = semitone in scale */
 extern const uint8_t g_scale_intervals[][12];
 

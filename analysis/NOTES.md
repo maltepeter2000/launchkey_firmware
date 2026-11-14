@@ -289,6 +289,19 @@ Static analysis for the step sequencer; nothing in this section is confirmed on 
   in the main loop for the selected instance. cfw_init registers one feature listener for both modes
   (`feat_changed`) to save a slot. **Status: built, host-tested, not yet tested on hardware.**
 
+## Drum pads (cfw, pad mode Drum)
+
+- Pad layout index 1 = Drum (`ui_layout_name` -> 0x0802AC34 tbb: pad layout 1 -> string 0xCA "Drum";
+  strings are numbered from 0x0802E994: 0xC9 DAW, 0xCA Drum, 0xCB User Chord, 0xCC Chord Map,
+  0xCD Arp Pattern, 0xDA..0xDD Custom 1..4). Feature param 0x1D = 1 while Drum is selected.
+- **`g_ctl_param` @0x20008170**: 256 x u32, control id -> confsys param of its MIDI output, filled by the
+  layouts, read by `ctl_out_note` (0x0801FBE2) and the release / pressure paths (0x080205A8, 0x08020722):
+  bits 29..31 = 1, bits 16..23 = group (high nibble 0 = note on channel = low nibble; 0x1x.. 0x6x other
+  kinds), bits 0..15 = id (note number). No fixed note table for the drum pads exists in flash.
+- cfw `drum_pads_poll` (cfw_poll): in pad mode Drum the note numbers of pads 0..15 are set to 36 + id
+  (top row 36..43, bottom row 44..51); channel (Drums Channel), velocity and LEDs stay stock. Only entries
+  with type 1 and a note group are touched. Not yet tested on hardware.
+
 ## Patches
 
 - `010-boot-logo.patch` – generated from `assets/boot_logo.txt`: adds an inverted "CFW" badge right of the

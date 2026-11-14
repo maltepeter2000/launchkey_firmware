@@ -9,11 +9,28 @@ firmware version 1.3 build 1563. It adds:
   1, 2 and 3): up to four notes, an accent and three controller values per step, clocked by a MIDI note or
   the MIDI clock, saved at power-off
 - **CC pages** – encoder mode Custom 1 has the 11 CC pages of the Pd controller layer (CC 20–119 without reserved numbers) on the keys channel, with feedback from Pd, instead of 2
+- **Drum pads in rows** – in pad mode Drum the pads send notes 36–43 (top row) and 44–51 (bottom row), left to right
 - **Scale memory** – the scale (on/off, type, root note, mode) is restored at power-on
 - A **CFW badge** on the boot logo, and the version shown at boot gets a `+cfw` suffix
 
 > ⚠️ **Use at your own risk.** Flashing modified firmware can leave the device unusable and may void your
 > warranty. Read [Safety & recovery](#safety--recovery) before your first upload.
+
+---
+
+## Drum pads
+
+In pad mode **Drum** (Shift + 1st pad of the bottom row) the pads send fixed notes in rows, left to right:
+
+| Row | Notes |
+|---|---|
+| top | 36 37 38 39 40 41 42 43 |
+| bottom | 44 45 46 47 48 49 50 51 |
+
+They go out on the **Drums Channel** (Settings) with velocity as usual. The drum bank buttons (up / down) do
+not shift the notes. Used by the TX81Z on Bela as its control pads.
+
+> **Not yet tested on hardware.**
 
 ---
 

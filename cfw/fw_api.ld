@@ -13,6 +13,7 @@ PROVIDE(str_append         = 0x08027DE4 | 1);
 
 /* data */
 PROVIDE(g_scale_intervals  = 0x08031DE0);
+PROVIDE(g_ctl_param        = 0x20008170);
 
 /* main loop / UI */
 PROVIDE(confstore_poll     = 0x08016FEE | 1);

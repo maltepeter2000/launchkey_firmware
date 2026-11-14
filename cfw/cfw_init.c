@@ -1,4 +1,5 @@
 /* cfw entry points called from hooks in the stock firmware (see cfw/hooks.txt). */
+#include "drum_pads.h"
 #include <stdint.h>
 #include "fw_api.h"
 #include "tm_mode.h"
@@ -36,6 +37,7 @@ void cfw_poll(void)
     }
     tm_mode_poll();
     seq_mode_poll();
+    drum_pads_poll();
 }
 
 /* Hook: replaces `bl midi_port_rx_notes` in the MIDI port's message handler (0x0803049A).
