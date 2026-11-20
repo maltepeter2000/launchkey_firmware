@@ -77,4 +77,5 @@ PROVIDE(ui_refresh_nav_leds = 0x080231CA | 1);
 
 /* MIDI in / note-out listeners (seq_mode.c) */
 PROVIDE(midi_port_rx_notes      = 0x080317AA | 1);
+PROVIDE(port_rx_sysex           = 0x08030342 | 1);
 PROVIDE(inmidi_add_out_listener = 0x08020D94 | 1);

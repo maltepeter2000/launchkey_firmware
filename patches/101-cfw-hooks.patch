@@ -17,3 +17,4 @@
 0x08030968  e3f753f9  06f077ff   # bl cfw_rt_start  was: bl clock_rt_start
 0x08030972  e3f757f9  06f07aff   # bl cfw_rt_continue  was: bl clock_rt_continue
 0x0803097c  e3f74df9  06f07dff   # bl cfw_rt_stop  was: bl clock_rt_stop
+0x080108cc  c7040308  dd7b0308   # word cfw_midi_sysex  was: .word 0x080304C7 (MIDI port SysEx handler, main's table)

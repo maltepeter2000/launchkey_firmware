@@ -302,6 +302,19 @@ Static analysis for the step sequencer; nothing in this section is confirmed on 
   (top row 36..43, bottom row 44..51); channel (Drums Channel), velocity and LEDs stay stock. Only entries
   with type 1 and a note group are touched. Not yet tested on hardware.
 
+## Display text (cfw, SysEx on the MIDI port)
+
+- main() registers the MIDI port's SysEx handler through a literal: `.word 0x080304C7` at **0x080108CC**
+  (`ldr.w r1` at 0x08010364, passed to the registration at 0x0801412A; the DAW port's pair is at
+  0x080108C4 / 0x080108C8). The handler at 0x080304C6 is a 16-bit `b port_rx_sysex`, too short for a
+  b.w hook, so hooks.txt replaces the table word (`word` kind in mkcave.py).
+- `port_rx_sysex(port, msg, len)` @0x08030342: msg includes F0 (byte 5 = 0x13 checks of the DAW
+  protocol); the chain of ~25 handlers, return value unused by the caller.
+- `cfw_midi_sysex` (cfw/lk_text.c): `F0 7D 4C 4B 01 title 00 value F7` -> ui_popup_begin,
+  disp_set_screen(1, 0), disp_text(1, 0 / 1, ...) with stack buffers (disp_text copies, as the CC
+  pages rely on); everything else tail-calls port_rx_sysex. No RAM used (cfw RAM is at 960 of 976 B).
+  Not yet tested on hardware.
+
 ## Patches
 
 - `010-boot-logo.patch` – generated from `assets/boot_logo.txt`: adds an inverted "CFW" badge right of the

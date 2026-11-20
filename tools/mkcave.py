@@ -7,7 +7,8 @@ Usage: mkcave.py cfw.elf hooks.txt stock.bin <code.patch> <hooks.patch>
   hooks.patch  one Thumb-2 BL or B.W per hook line, original bytes taken from hooks.txt and
                checked against stock.bin here already
 
-hooks.txt line: <address> bl|b.w <symbol> <original bytes hex>   [# comment]
+hooks.txt line: <address> bl|b.w|word <symbol> <original bytes hex>   [# comment]
+(word: a 32-bit pointer to the symbol, Thumb bit set, e.g. in a handler table)
 """
 import argparse
 import sys
@@ -62,15 +63,18 @@ def main():
         f = code_part.split()
         if not f:
             continue
-        if len(f) != 4 or f[1] not in ("bl", "b.w"):
-            sys.exit(f"{a.hooks}:{lineno}: expected '<addr> bl|b.w <symbol> <orig hex>'")
+        if len(f) != 4 or f[1] not in ("bl", "b.w", "word"):
+            sys.exit(f"{a.hooks}:{lineno}: expected '<addr> bl|b.w|word <symbol> <orig hex>'")
         addr, kind, sym, orig = int(f[0], 16), f[1], f[2], bytes.fromhex(f[3])
         if sym not in syms:
             sys.exit(f"{a.hooks}:{lineno}: symbol '{sym}' not in {a.elf}")
         cur = stock[addr - BASE:addr - BASE + 4]
         if cur != orig:
             sys.exit(f"{a.hooks}:{lineno}: 0x{addr:08x} is {cur.hex()}, hooks.txt expects {orig.hex()}")
-        new = thumb_branch(addr, syms[sym], kind == "bl")
+        if kind == "word":
+            new = (syms[sym] | 1).to_bytes(4, "little")
+        else:
+            new = thumb_branch(addr, syms[sym], kind == "bl")
         out.append(f"0x{addr:08x}  {orig.hex()}  {new.hex()}   # {kind} {sym}  {comment.strip()}".rstrip())
     a.hooks_patch.write_text("\n".join(out) + "\n")
     print(f"cfw: {len(code)} bytes code @ 0x{start:08x}, {ram} bytes RAM, "

@@ -76,12 +76,16 @@ build/test_seq_core: cfw/test/test_seq_core.c cfw/seq_core.c cfw/seq_core.h | bu
 build/test_seq_mode: cfw/test/test_seq_mode.c cfw/seq_mode.c cfw/seq_core.c $(wildcard cfw/*.h) | build
 	clang -std=c11 -Wall -Wextra -Werror -O1 -o $@ cfw/test/test_seq_mode.c cfw/seq_mode.c cfw/seq_core.c
 
-cfw-test: build/test_tm_core build/test_cc_pages build/test_seq_core build/test_seq_mode build/test_drum_pads
+build/test_lk_text: cfw/test/test_lk_text.c cfw/lk_text.c cfw/lk_text.h cfw/fw_api.h | build
+	clang -std=c11 -Wall -Wextra -Werror -O1 -DLKT_HOST_TEST -o $@ cfw/test/test_lk_text.c cfw/lk_text.c
+
+cfw-test: build/test_tm_core build/test_cc_pages build/test_seq_core build/test_seq_mode build/test_drum_pads build/test_lk_text
 	build/test_tm_core
 	build/test_cc_pages
 	build/test_seq_core
 	build/test_seq_mode
 	build/test_drum_pads
+	build/test_lk_text
 
 # Version field 4 = number of patches (stock 1.3.1563.1717 -> 1.3.1563.<n>)
 build/patched.bin: $(BIN) $(PATCHES) tools/apply_patches.py

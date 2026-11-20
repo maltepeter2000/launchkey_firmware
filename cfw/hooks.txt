@@ -1,7 +1,8 @@
 # Hooks from the stock firmware into cfw code. tools/mkcave.py turns these into
 # patches/101-cfw-hooks.patch.
 #
-#   <address>  bl|b.w  <cfw symbol>  <original bytes hex>   # comment
+#   <address>  bl|b.w|word  <cfw symbol>  <original bytes hex>   # comment
+#   word: a function pointer in a table (the symbol's Thumb address)
 #
 # The original bytes are verified, so a hook never lands on the wrong instruction.
 
@@ -32,3 +33,6 @@
 0x08030968  bl  cfw_rt_start       e3f753f9   # was: bl clock_rt_start
 0x08030972  bl  cfw_rt_continue    e3f757f9   # was: bl clock_rt_continue
 0x0803097c  bl  cfw_rt_stop        e3f74df9   # was: bl clock_rt_stop
+
+# MIDI in: SysEx on the MIDI port -> display text from the host (cfw/lk_text.c), the rest goes on
+0x080108cc  word cfw_midi_sysex   c7040308   # was: .word 0x080304C7 (MIDI port SysEx handler, main's table)

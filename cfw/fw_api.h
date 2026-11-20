@@ -98,6 +98,10 @@ void midi_send3(midi_port_t *port, uint32_t status, uint32_t d1, uint32_t d2);
  * with (port, status, data1, data2); returns 1 if it handled the message. cfw hooks that
  * call (cfw_midi_rx). */
 uint32_t midi_port_rx_notes(midi_port_t *port, uint32_t status, uint32_t d1, uint32_t d2);
+/* SysEx in: the stock chain of SysEx handlers (updater, DAW protocol ...). The message
+ * includes F0 and F7. The MIDI port's handler (address in main's table at 0x080108CC) is a
+ * plain branch here; cfw_midi_sysex replaces it in the table. */
+void port_rx_sysex(midi_port_t *port, const uint8_t *msg, uint32_t len);
 
 /* Note-out listeners (inputmidi_listener.cpp, 1 of 8 used): called with (control id, group,
  * number, value) for every message a control sends; group < 0x10 = note on channel `group`,

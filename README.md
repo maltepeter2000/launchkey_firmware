@@ -9,6 +9,8 @@ firmware version 1.3 build 1563. It adds:
   1, 2 and 3): up to four notes, an accent and three controller values per step, clocked by a MIDI note or
   the MIDI clock, saved at power-off
 - **CC pages** – encoder mode Custom 1 has the 11 CC pages of the Pd controller layer (CC 20–119 without reserved numbers) on the keys channel, with feedback from Pd, instead of 2
+- **Display text from the host** – a short SysEx message puts two lines on the display, so Pd can
+  show the name and value of the parameter you turn and the patch that plays
 - **Drum pads in rows** – in pad mode Drum the pads send notes 36–43 (top row) and 44–51 (bottom row), left to right
 - **Scale memory** – the scale (on/off, type, root note, mode) is restored at power-on
 - A **CFW badge** on the boot logo, and the version shown at boot gets a `+cfw` suffix
@@ -250,6 +252,25 @@ Left out are the numbers with a fixed meaning: 32 and 38 (bank / data LSB), 64�
   `cfw/cc_pages.c`.
 - In pad mode Custom 4 (Turing Machine) encoders 1–7 belong to the Turing Machine; only
   encoder 8 sends the CC of the current page.
+
+## Display text from the host
+
+> **Not yet tested on hardware.** Built and host-tested (`make cfw-test`) only.
+
+A SysEx message on the MIDI port shows two lines in the display's popup (the one the CC pages use),
+in every mode:
+
+```
+F0 7D 4C 4B 01 <title> 00 <value> F7
+```
+
+`7D` is the non-commercial manufacturer ID, `4C 4B` = "LK", `01` = popup. Title and value are ASCII,
+up to 18 characters each (longer is cut, other bytes show as `?`); without the `00` there is only a
+title. All other SysEx goes to the stock handlers as before.
+
+The Pd instruments send it with `[lkdisplay]` (pico-vintage-synths): turning an encoder of a CC
+page first shows `P1 Ch1 CC20 64` and a moment later the instrument's answer, e.g. `VCF freq` /
+`64`; a patch change shows `Preset 12` / `Harpsichord 1`.
 
 ---
 

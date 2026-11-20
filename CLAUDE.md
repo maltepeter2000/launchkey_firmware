@@ -40,6 +40,8 @@ details belong here and in `analysis/NOTES.md`.
   instance's channel or by the MIDI clock, MIDI Start / Stop received and sent, stored in the settings store
   (NOTES "Settings store"). MIDI input path, key
   and button ids: NOTES "MIDI input, keys and buttons" and "Step sequencers".
+- Display text: SysEx `F0 7D 4C 4B 01 title 00 value F7` on the MIDI port -> the two-line popup
+  (`cfw/lk_text.c`, table-word hook at 0x080108CC, host test `cfw/test/test_lk_text.c`); NOTES "Display text".
 - CC pages = encoder mode Custom 1 with the 11 CC pages of the Pd controller layer on the Keys Channel, CC feedback in, sync request CC 3 (`cfw/cc_pages.c`, host test `cfw/test/test_cc_pages.c`);
   stock page handling and the three hooks: NOTES "Encoder pages".
 
