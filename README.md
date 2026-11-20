@@ -11,7 +11,8 @@ firmware version 1.3 build 1563. It adds:
 - **CC pages** – encoder mode Custom 1 has the 11 CC pages of the Pd controller layer (CC 20–119 without reserved numbers) on the keys channel, with feedback from Pd, instead of 2
 - **Display text from the host** – a short SysEx message puts two lines on the display, so Pd can
   show the name and value of the parameter you turn and the patch that plays
-- **Drum pads in rows** – in pad mode Drum the pads send notes 36–43 (top row) and 44–51 (bottom row), left to right
+- **Drum pads in rows** – in pad mode Drum the pads send notes 36–43 (top row) and 44–51 (bottom row), left to right,
+  and the host can set each pad's colour (static, flashing or pulsing)
 - **Scale memory** – the scale (on/off, type, root note, mode) is restored at power-on
 - A **CFW badge** on the boot logo, and the version shown at boot gets a `+cfw` suffix
 
@@ -30,7 +31,29 @@ In pad mode **Drum** (Shift + 1st pad of the bottom row) the pads send fixed not
 | bottom | 44 45 46 47 48 49 50 51 |
 
 They go out on the **Drums Channel** (Settings) with velocity as usual. The drum bank buttons (up / down) do
-not shift the notes. Used by the TX81Z on Bela as its control pads.
+not shift the notes. Used by the Pd instruments of bela-workstation as their control pads.
+
+### Pad colours from the host
+
+While pad mode Drum is on, the host can colour each pad: send a **note on** on the Drums Channel with the
+pad's note (36–51) and
+
+    velocity = colour + 32 × mode        mode 0 static, 1 flashing, 2 pulsing
+
+Velocity 0 (or a note off) gives the pad back to the normal LED. Colours:
+
+| # | Colour | # | Colour | # | Colour | # | Colour |
+|---|---|---|---|---|---|---|---|
+| 0 | off | 4 | yellow | 8 | purple | 12 | magenta |
+| 1 | white | 5 | green | 9 | pink | 13 | amber |
+| 2 | red | 6 | cyan | 10 | lime | 14 | sky blue |
+| 3 | orange | 7 | blue | 11 | teal | 15 | warm white |
+
+16–31 are the same colours dimmed (16 + n = colour n at a quarter brightness). Example: velocity 7 = blue,
+39 (7 + 32) = flashing blue, 0 = normal again.
+
+When you switch to pad mode Drum, the Launchkey sends **CC 3 = 127** on the Drums Channel, so the host can
+send its pad colours again; when you leave Drum, all pads go back to normal.
 
 > **Not yet tested on hardware.**
 

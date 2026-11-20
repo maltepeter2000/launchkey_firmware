@@ -301,6 +301,16 @@ Static analysis for the step sequencer; nothing in this section is confirmed on 
 - cfw `drum_pads_poll` (cfw_poll): in pad mode Drum the note numbers of pads 0..15 are set to 36 + id
   (top row 36..43, bottom row 44..51); channel (Drums Channel), velocity and LEDs stay stock. Only entries
   with type 1 and a note group are touched. Not yet tested on hardware.
+- **Pad LEDs from the host** (`drum_pads_midi_rx`, called in `cfw_midi_rx` after the sequencer): while the
+  last `drum_pads_poll` saw pad mode Drum, a note on / off on the MIDI port with the pads' channel (group low
+  nibble of `g_ctl_param[0]`, i.e. the Drums Channel) and note 36..51 is taken (not passed to
+  `midi_port_rx_notes`, so the stock note feedback does not fight it): velocity = colour + 32 * mode,
+  colour 0..15 = palette in flash, 16..31 = same at 1/4; mode 0 static, 1 flash, 2 pulse, 3 = static.
+  Velocity 0 / note off = `LED_RELEASE`. A 16-bit mask remembers the overridden pads; leaving Drum releases
+  them, entering Drum sends CC 3 = 127 on the Drums Channel (`midi_send3(g_app_ports[1], ...)`) as an LED
+  refresh request. `drum_pads_poll` runs first in `cfw_poll` so its release cannot undo the pads a Custom
+  mode draws on the same pass. RAM: 3 bytes, fitted into alignment padding (total stays 964). Host-tested
+  (`test_drum_pads`), not yet tested on hardware.
 
 ## Display text (cfw, SysEx on the MIDI port)
 

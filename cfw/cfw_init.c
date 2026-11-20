@@ -35,17 +35,20 @@ void cfw_poll(void)
         feat_add_listener(feat_changed);
         inmidi_add_out_listener(seq_note_out);
     }
+    drum_pads_poll();           /* first: releases its pad LEDs before a mode draws its own */
     tm_mode_poll();
     seq_mode_poll();
-    drum_pads_poll();
 }
 
 /* Hook: replaces `bl midi_port_rx_notes` in the MIDI port's message handler (0x0803049A).
- * The sequencer takes its clock note; everything else goes to the stock handler. */
+ * The sequencer takes its clock note, Drum mode its pad LED notes; everything else goes to the
+ * stock handler. */
 uint32_t cfw_midi_rx(midi_port_t *port, uint32_t status, uint32_t d1, uint32_t d2)
 {
     ccp_midi_rx(status, d1, d2);                 /* CC feedback for the CC pages, only reads */
     if (seq_midi_rx(status, d1, d2))
+        return 1;
+    if (drum_pads_midi_rx(status, d1, d2))
         return 1;
     return midi_port_rx_notes(port, status, d1, d2);
 }

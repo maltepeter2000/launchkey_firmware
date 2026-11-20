@@ -40,6 +40,9 @@ details belong here and in `analysis/NOTES.md`.
   instance's channel or by the MIDI clock, MIDI Start / Stop received and sent, stored in the settings store
   (NOTES "Settings store"). MIDI input path, key
   and button ids: NOTES "MIDI input, keys and buttons" and "Step sequencers".
+- Drum pads (pad mode Drum): notes 36..51 in rows; host pad LEDs = note on on the Drums Channel, velocity =
+  colour + 32 * mode, 0 = stock; CC 3 = 127 sent on entry (`cfw/drum_pads.c`, host test
+  `cfw/test/test_drum_pads.c`); NOTES "Drum pads".
 - Display text: SysEx `F0 7D 4C 4B 01 title 00 value F7` on the MIDI port -> the two-line popup
   (`cfw/lk_text.c`, table-word hook at 0x080108CC, host test `cfw/test/test_lk_text.c`); NOTES "Display text".
 - CC pages = encoder mode Custom 1 with the 11 CC pages of the Pd controller layer on the Keys Channel, CC feedback in, sync request CC 3 (`cfw/cc_pages.c`, host test `cfw/test/test_cc_pages.c`);
@@ -73,6 +76,8 @@ details belong here and in `analysis/NOTES.md`.
 - Add every identified function/global to `analysis/symbols.txt` (`<addr> <name> [func|data]`) and findings to NOTES.
 - `xcrun clang -target thumbv7em-none-eabi -mcpu=cortex-m4` compiles (also for quick byte encodings of a few
   instructions: assemble with `-x assembler`, then `xcrun llvm-objdump -d`). Linker: Homebrew `lld` (`ld.lld`).
+  On Linux (cloud sessions) the same build works with plain clang: `make cfw ARMCC="clang -target
+  thumbv7em-none-eabi -mcpu=cortex-m4 -mthumb -mfloat-abi=soft" OBJDUMP=llvm-objdump` (byte-identical output).
 - Raw patch bytes are little-endian Thumb halfwords (`00bf` = nop, `7047` = bx lr).
 
 ## Update protocol on the device (fw 1563, handler 0x08030E00)
