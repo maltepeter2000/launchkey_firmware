@@ -14,6 +14,12 @@
  *   sync request       when the channel differs from the one used last (power-on, keys channel
  *                      changed) the first turn sends CC 3 = 127 first: the Pd layer answers with all
  *                      its values as CC, which land here as feedback.
+ *   host display       once the instrument on the keys channel has sent display text
+ *                      (cfw/lk_text.c, from Pd's [lkdisplay]), turning an encoder shows only
+ *                      its answer (parameter name and value), not page / channel / CC, and
+ *                      the page popup leaves out the CC numbers. At the limit the CC is sent
+ *                      again, so the instrument still answers. Another keys channel = back to
+ *                      the CC display until that instrument sends text.
  *   up / down buttons  previous / next page, handled by the stock firmware as before. Three
  *                      hooks (cfw/hooks.txt) widen it: cfw_enc_page_count reports CCP_PAGES
  *                      pages for Custom 1 (button LEDs and limits follow), cfw_enc_set_page
@@ -57,6 +63,8 @@ static const uint8_t page_cc[CCP_PAGES][ENC_COUNT] = {
 };
 
 static uint8_t value[CCP_PAGES][ENC_COUNT];
+static uint8_t host_ch;               /* keys channel + 1 whose instrument sent display text, 0 = none */
+static uint32_t channel(void);
 static uint8_t owned;                 /* encoders whose current touch belongs to this mode */
 static uint8_t last_ch;               /* channel + 1 of the last CC sent, 0 = none yet */
 
@@ -153,10 +161,16 @@ void cfw_enc_page_popup(uint32_t new_page)
     int last = ENC_COUNT - 1;
     while (last > 0 && !cc[last])
         last--;
-    p = put_num(put_str(put_num(put_str(title, "CC Page "), new_page + 1), "/"), CCP_PAGES);
-    *p = 0;
-    p = put_num(put_str(put_num(put_str(text, "CC "), cc[0]), " - "), cc[last]);
-    *p = 0;
+    if (host_ch == channel() + 1) {     /* the instrument names its parameters itself */
+        p = put_num(put_str(put_num(put_str(title, "Page "), new_page + 1), "/"), CCP_PAGES);
+        *p = 0;
+        text[0] = 0;
+    } else {
+        p = put_num(put_str(put_num(put_str(title, "CC Page "), new_page + 1), "/"), CCP_PAGES);
+        *p = 0;
+        p = put_num(put_str(put_num(put_str(text, "CC "), cc[0]), " - "), cc[last]);
+        *p = 0;
+    }
     disp_set_screen(1, 0);              /* same sequence as the stock page popup */
     disp_text(1, 0, title);
     disp_text(1, 1, text);
@@ -221,7 +235,8 @@ int ccp_enc_event(int list, uint32_t id, int32_t delta)
     int v = value[pg][enc] + delta * CCP_STEP;
     v = v < 0 ? 0 : v > 127 ? 127 : v;
     midi_port_t *port = g_app_ports[MIDI_PORT];
-    if (cc && v != value[pg][enc]) {
+    int host = host_ch == ch + 1;
+    if (cc && (v != value[pg][enc] || host)) {      /* host: also at the limit, it answers */
         value[pg][enc] = (uint8_t)v;
         if (port) {
             if (last_ch != ch + 1) {                /* new channel: ask the Pd layer for its values */
@@ -231,8 +246,16 @@ int ccp_enc_event(int list, uint32_t id, int32_t delta)
             midi_send3(port, 0xB0 | ch, cc, (uint32_t)v);
         }
     }
-    show_value(pg, enc, ch);
+    if (!host || !cc)
+        show_value(pg, enc, ch);
     return 1;
+}
+
+/* Display text arrived from the host (cfw_midi_sysex): the instrument on the keys channel
+ * names its parameters from now on. */
+void ccp_host_text(void)
+{
+    host_ch = (uint8_t)(channel() + 1);
 }
 
 /* MIDI port input (from cfw_midi_rx, before the stock handler): a CC on the Keys Channel sets

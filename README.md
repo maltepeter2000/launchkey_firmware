@@ -269,8 +269,14 @@ up to 18 characters each (longer is cut, other bytes show as `?`); without the `
 title. All other SysEx goes to the stock handlers as before.
 
 The Pd instruments send it with `[lkdisplay]` (pico-vintage-synths): turning an encoder of a CC
-page first shows `P1 Ch1 CC20 64` and a moment later the instrument's answer, e.g. `VCF freq` /
-`64`; a patch change shows `Preset 12` / `Harpsichord 1`.
+page shows the instrument's answer, e.g. `VCF freq` / `64`; a patch change shows `Preset 12` /
+`Harpsichord 1`.
+
+Once display text has come from the instrument on the keys channel, the CC pages leave the display
+to it: turning an encoder no longer shows `P1 Ch1 CC20 64` first, and the page popup shows only
+`Page 2/11` without CC numbers. At the end of an encoder's range the CC is sent again, so the
+instrument still answers. Changing the keys channel brings the CC display back until the
+instrument on the new channel sends text (instruments without `[lkdisplay]` keep the CC display).
 
 ---
 

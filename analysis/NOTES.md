@@ -314,6 +314,11 @@ Static analysis for the step sequencer; nothing in this section is confirmed on 
   disp_set_screen(1, 0), disp_text(1, 0 / 1, ...) with stack buffers (disp_text copies, as the CC
   pages rely on); everything else tail-calls port_rx_sysex. No RAM used (cfw RAM is at 960 of 976 B).
   Not yet tested on hardware.
+- Host display in the CC pages: display text calls `ccp_host_text()`, which records the keys channel
+  (`host_ch`). While the keys channel equals it, `ccp_enc_event` skips its own popup (the instrument's
+  answer would replace it a few ms later and the two flicker) and sends the CC also when the value
+  sits at a limit; `cfw_enc_page_popup` shows "Page n/11" with an empty second line. 1 byte RAM.
+  (Tested on hardware 2026-11-20: the display text arrives from Pd on macOS.)
 
 ## Patches
 

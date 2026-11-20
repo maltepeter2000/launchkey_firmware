@@ -1,6 +1,7 @@
 /* Display text from the host, see lk_text.h. */
 #include "fw_api.h"
 #include "lk_text.h"
+#include "cc_pages.h"
 
 static const uint8_t header[] = {0xF0, 0x7D, 0x4C, 0x4B, 0x01};
 
@@ -36,6 +37,7 @@ void cfw_midi_sysex(midi_port_t *port, const uint8_t *msg, uint32_t len)
 {
     char title_buf[LKT_MAX + 1], value_buf[LKT_MAX + 1];   /* disp_text copies (as in cc_pages.c) */
     if (lkt_parse(msg, len, title_buf, value_buf)) {
+        ccp_host_text();
         ui_popup_begin();
         disp_set_screen(1, 0);
         disp_text(1, 0, title_buf);

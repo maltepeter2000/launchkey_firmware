@@ -128,6 +128,32 @@ int main(void)
     CHECK(n_sent == 3 && sent_d1 == 27 && sent_d2 == 127);
     CHECK(ccp_enc_event(0, ENC(8), 1) == 1 && n_sent == 3);
 
+    /* host display: after display text from the instrument on the keys channel, turning shows
+     * no own popup (the host answers), the CC is sent also at the limit, the page popup has no
+     * CC numbers; another keys channel shows the CC display again */
+    {
+        int pb = n_popup_begin, sent = n_sent;
+        strcpy(field[0], "-"); strcpy(field[1], "-");
+        ccp_host_text();
+        CHECK(ccp_enc_event(0, ENC(8), 1) == 1 && n_sent == sent + 1 && sent_d1 == 27 && sent_d2 == 127);
+        CHECK(n_popup_begin == pb && !strcmp(field[0], "-"));
+        cfw_enc_page_popup(1);
+        CHECK(!strcmp(field[0], "Page 2/11") && !strcmp(field[1], ""));
+        keys_ch = 1;
+        CHECK(ccp_enc_event(0, ENC(8), 1) == 1 && n_popup_begin == pb + 1);
+        CHECK(!strncmp(field[0], "P1 Ch2", 6));
+        cfw_enc_page_popup(1);
+        CHECK(!strcmp(field[0], "CC Page 2/11"));
+        keys_ch = 0;
+        ccp_host_text();
+        ccp_host_text();
+        keys_ch = 5;                    /* leave the host mode for the rest of the test */
+        ccp_host_text();
+        keys_ch = 0;
+        n_sent = sent;
+        n_log = 0;
+    }
+
     /* the other turn lists are swallowed without sending */
     CHECK(ccp_enc_event(1, ENC(2), 1) == 1 && ccp_enc_event(2, ENC(2), 1) == 1 && n_sent == 3);
 
