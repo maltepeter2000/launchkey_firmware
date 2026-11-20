@@ -317,7 +317,9 @@ Static analysis for the step sequencer; nothing in this section is confirmed on 
 - Host display in the CC pages: display text calls `ccp_host_text()`, which records the keys channel
   (`host_ch`). While the keys channel equals it, `ccp_enc_event` skips its own popup (the instrument's
   answer would replace it a few ms later and the two flicker) and sends the CC also when the value
-  sits at a limit; `cfw_enc_page_popup` shows "Page n/11" with an empty second line. 1 byte RAM.
+  sits at a limit; `cfw_enc_page_popup` shows "Page n/11" with an empty second line. `host_miss`
+  counts turns since the last text: after 4 unanswered turns (Pd closed) the CC display is back,
+  no timer needed. 2 bytes RAM.
   (Tested on hardware 2026-11-20: the display text arrives from Pd on macOS.)
 
 ## Patches

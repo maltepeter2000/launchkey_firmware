@@ -277,6 +277,7 @@ to it: turning an encoder no longer shows `P1 Ch1 CC20 64` first, and the page p
 `Page 2/11` without CC numbers. At the end of an encoder's range the CC is sent again, so the
 instrument still answers. Changing the keys channel brings the CC display back until the
 instrument on the new channel sends text (instruments without `[lkdisplay]` keep the CC display).
+If the instrument stops answering (Pd closed), the CC display is back after four turns.
 
 ---
 

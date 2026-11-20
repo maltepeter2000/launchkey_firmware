@@ -146,6 +146,17 @@ int main(void)
         CHECK(!strcmp(field[0], "CC Page 2/11"));
         keys_ch = 0;
         ccp_host_text();
+        /* the host stops answering (Pd closed): after CCP_HOST_MISSES silent turns the CC
+         * display is back; the next text switches it off again */
+        pb = n_popup_begin;
+        for (int k = 0; k < 4; k++)
+            CHECK(ccp_enc_event(0, ENC(8), 1) == 1);
+        CHECK(n_popup_begin == pb);
+        CHECK(ccp_enc_event(0, ENC(8), 1) == 1 && n_popup_begin == pb + 1);
+        CHECK(!strncmp(field[0], "P1 Ch1", 6));
+        CHECK(ccp_enc_event(0, ENC(8), 1) == 1 && n_popup_begin == pb + 2);
+        ccp_host_text();
+        CHECK(ccp_enc_event(0, ENC(8), 1) == 1 && n_popup_begin == pb + 2);
         ccp_host_text();
         keys_ch = 5;                    /* leave the host mode for the rest of the test */
         ccp_host_text();

@@ -18,8 +18,9 @@
  *                      (cfw/lk_text.c, from Pd's [lkdisplay]), turning an encoder shows only
  *                      its answer (parameter name and value), not page / channel / CC, and
  *                      the page popup leaves out the CC numbers. At the limit the CC is sent
- *                      again, so the instrument still answers. Another keys channel = back to
- *                      the CC display until that instrument sends text.
+ *                      again, so the instrument still answers. Another keys channel, or
+ *                      CCP_HOST_MISSES turns in a row without an answer (Pd closed), = back
+ *                      to the CC display until display text comes again.
  *   up / down buttons  previous / next page, handled by the stock firmware as before. Three
  *                      hooks (cfw/hooks.txt) widen it: cfw_enc_page_count reports CCP_PAGES
  *                      pages for Custom 1 (button LEDs and limits follow), cfw_enc_set_page
@@ -38,7 +39,8 @@
 
 #define CCP_PAGES         11
 #define CCP_STEP          1           /* value change per encoder tick */
-#define CCP_SYNC_CC       3           /* undefined in MIDI 1.0: "send me your values" for the Pd layer */
+#define CCP_SYNC_CC       3
+#define CCP_HOST_MISSES   4           /* unanswered turns until the CC display comes back */           /* undefined in MIDI 1.0: "send me your values" for the Pd layer */
 
 #define ENC_FIRST         56          /* encoder 1 */
 #define ENC_COUNT         8
@@ -64,6 +66,7 @@ static const uint8_t page_cc[CCP_PAGES][ENC_COUNT] = {
 
 static uint8_t value[CCP_PAGES][ENC_COUNT];
 static uint8_t host_ch;               /* keys channel + 1 whose instrument sent display text, 0 = none */
+static uint8_t host_miss;             /* turns sent since the last display text */
 static uint32_t channel(void);
 static uint8_t owned;                 /* encoders whose current touch belongs to this mode */
 static uint8_t last_ch;               /* channel + 1 of the last CC sent, 0 = none yet */
@@ -236,6 +239,8 @@ int ccp_enc_event(int list, uint32_t id, int32_t delta)
     v = v < 0 ? 0 : v > 127 ? 127 : v;
     midi_port_t *port = g_app_ports[MIDI_PORT];
     int host = host_ch == ch + 1;
+    if (host && cc && ++host_miss > CCP_HOST_MISSES)
+        host = host_ch = 0;                          /* no answer any more: show it ourselves */
     if (cc && (v != value[pg][enc] || host)) {      /* host: also at the limit, it answers */
         value[pg][enc] = (uint8_t)v;
         if (port) {
@@ -256,6 +261,7 @@ int ccp_enc_event(int list, uint32_t id, int32_t delta)
 void ccp_host_text(void)
 {
     host_ch = (uint8_t)(channel() + 1);
+    host_miss = 0;
 }
 
 /* MIDI port input (from cfw_midi_rx, before the stock handler): a CC on the Keys Channel sets
