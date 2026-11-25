@@ -374,7 +374,9 @@ the interpreter ring ctx + 0x14 only when the interpreter is done, flag ctx + 0x
 the first emitter call after a commit (`0x08012122`) resets the writer ring when 0x2DE is set, so
 commands written while the interpreter is busy are dropped. Fix: draw only when `dl_idle(ctx)`
 (`0x080123F8`: writer ring empty and interpreter done), else try again on the next pass.
-**Status: fix built, not yet tested on hardware.** To check on the device: does the bitmap appear, where does the
+Second test with diagnostics (06): writer ring empty and idle, but draws 0 - the "SysTick
+counter" at 0x2000150C stays **0** on the device, so the redraw time never came. Now timed with the
+DWT cycle counter (enabled on first use, 168 MHz assumed). **Status: built, not yet tested.** To check on the device: does the bitmap appear, where does the
 popup title sit, does it flicker, how fast is `gfx_test.py env`.
 
 ## Patches

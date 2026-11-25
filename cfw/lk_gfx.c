@@ -6,7 +6,24 @@
 
 static uint8_t fb[LKG_PAGES][LKG_W];
 #ifndef LKG_HOST_TEST
-static uint32_t shown_until, next_draw;
+/* Time: the SysTick counter at 0x2000150C stays 0 on the device (hardware test 2026-11-25), so
+ * the Cortex-M4 cycle counter (DWT CYCCNT) is used, counted in units of 2^16 cycles
+ * (LKG_TICK_HZ ticks a second at the assumed core clock). */
+#define DEMCR     (*(volatile uint32_t *)0xE000EDFC)
+#define DWT_CTRL  (*(volatile uint32_t *)0xE0001000)
+#define DWT_CYC   (*(volatile uint32_t *)0xE0001004)
+#define LKG_CPU_HZ 168000000u
+#define LKG_MS(ms) ((uint32_t)((uint64_t)(ms) * LKG_CPU_HZ / 1000u))
+static uint32_t now_cyc(void)
+{
+    if (!(DWT_CTRL & 1u)) {
+        DEMCR |= 1u << 24;               /* TRCENA */
+        DWT_CYC = 0;
+        DWT_CTRL |= 1u;                  /* CYCCNTENA */
+    }
+    return DWT_CYC;
+}
+static uint32_t shown_until, next_draw, n_poll;
 static uint16_t n_draw, n_busy;           /* diagnostics (06) */
 static uint8_t variant;                   /* 07: how to draw, see draw() */
 #endif
@@ -88,12 +105,12 @@ int lkg_sysex(const uint8_t *msg, uint32_t len)
     if (cmd == 0x06) {                    /* diagnostics: reply F0 7D 4C 4B 06 <u32 as 5 x 7 bits> ... F7 */
         uint8_t *ctx = (uint8_t *)disp_dl_ctx();
         uint32_t v[10];
-        v[0] = g_sys_ms; v[1] = (uint32_t)ctx; v[2] = n_draw; v[3] = n_busy; v[4] = active;
+        v[0] = now_cyc(); v[1] = (uint32_t)ctx; v[2] = n_draw; v[3] = n_busy; v[4] = active;
         v[5] = ctx ? dl_idle(ctx) : 9;
         v[6] = ctx ? *(uint32_t *)(ctx + 8) : 0;         /* writer ring read */
         v[7] = ctx ? *(uint32_t *)(ctx + 12) : 0;        /* writer ring write */
         v[8] = ctx ? ctx[0x2DD] | (ctx[0x2DE] << 8) : 0;
-        v[9] = variant;
+        v[9] = n_poll;
         midi_port_t *port = g_app_ports[1];
         midi_put(port, 0xF0); midi_put(port, 0x7D); midi_put(port, 0x4C); midi_put(port, 0x4B); midi_put(port, 0x06);
         for (uint32_t i = 0; i < 10; i++)
@@ -118,9 +135,9 @@ int lkg_sysex(const uint8_t *msg, uint32_t len)
         disp_set_screen(1, 0);
         disp_text(1, 0, title);
         disp_text(1, 1, "");
-        const uint32_t now = g_sys_ms;
-        shown_until = now + LKG_SHOW_MS;
-        next_draw = now + 20;             /* after the popup has drawn its fields */
+        const uint32_t now = now_cyc();
+        shown_until = now + LKG_MS(LKG_SHOW_MS);
+        next_draw = now + LKG_MS(20);     /* after the popup has drawn its fields */
 #endif
         active = 1;
         return 1;
@@ -131,14 +148,15 @@ int lkg_sysex(const uint8_t *msg, uint32_t len)
 void lkg_poll(void)
 {
 #ifndef LKG_HOST_TEST
+    n_poll++;
     if (!active)
         return;
-    const uint32_t now = g_sys_ms;
+    const uint32_t now = now_cyc();
     if ((int32_t)(now - shown_until) >= 0) {
         active = 0;
         return;
     }
     if ((int32_t)(now - next_draw) >= 0 && draw())
-        next_draw = now + LKG_REDRAW_MS;
+        next_draw = now + LKG_MS(LKG_REDRAW_MS);
 #endif
 }

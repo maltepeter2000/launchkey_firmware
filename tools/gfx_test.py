@@ -91,7 +91,7 @@ def envelope(a, d, s, r):
     return bm
 
 
-NAMES = ["ms", "ctx", "draws", "busy", "active", "idle", "ring rd", "ring wr", "flags 2DD|2DE<<8", "variant"]
+NAMES = ["cycles", "ctx", "draws", "busy", "active", "idle", "ring rd", "ring wr", "flags 2DD|2DE<<8", "polls"]
 VARIANTS = {0: "tiles 64 x 8, y in pixels", 1: "fill rectangle pages 2-7", 2: "flash image (boot logo)",
             3: "tiles 64 x 8, y in pages", 4: "one image 128 x 48"}
 
