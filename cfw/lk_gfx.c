@@ -8,11 +8,11 @@ static uint8_t fb[LKG_PAGES][LKG_W];
 #ifndef LKG_HOST_TEST
 /* Time: the SysTick counter at 0x2000150C stays 0 on the device (hardware test 2026-11-25), so
  * the Cortex-M4 cycle counter (DWT CYCCNT) is used, counted in units of 2^16 cycles
- * (LKG_TICK_HZ ticks a second at the assumed core clock). */
+ * at the measured core clock. */
 #define DEMCR     (*(volatile uint32_t *)0xE000EDFC)
 #define DWT_CTRL  (*(volatile uint32_t *)0xE0001000)
 #define DWT_CYC   (*(volatile uint32_t *)0xE0001004)
-#define LKG_CPU_HZ 168000000u
+#define LKG_CPU_HZ 84000000u     /* measured 2026-11-25: 338 M cycles in about 4.0 s */
 #define LKG_MS(ms) ((uint32_t)((uint64_t)(ms) * LKG_CPU_HZ / 1000u))
 static uint32_t now_cyc(void)
 {
@@ -60,7 +60,7 @@ static int draw(void)
         dl_draw_image(ctx, 0x27F, 0, LKG_TOP * 8);
         return 1;
     }
-    if (variant == 4) {                   /* the whole bitmap as one pointer image */
+    if (variant == 0) {                   /* default: the whole bitmap as one pointer image (works) */
         dl_image_desc_t d = {&fb[0][0], LKG_W, LKG_PAGES};
         dl_draw_ptr(ctx, &d, 0, LKG_TOP * 8);
         return 1;
@@ -68,7 +68,7 @@ static int draw(void)
     for (uint32_t p = 0; p < LKG_PAGES; p++)
         for (uint32_t h = 0; h < 2; h++) {
             dl_image_desc_t d = {&fb[p][h * 64], 64, 1};
-            dl_draw_ptr(ctx, &d, h * 64, variant == 3 ? LKG_TOP + p : (LKG_TOP + p) * 8);   /* 3: y in pages */
+            dl_draw_ptr(ctx, &d, h * 64, variant == 3 ? LKG_TOP + p : (LKG_TOP + p) * 8);   /* 3: y in pages (wrong) */
         }
     return 1;
 }
