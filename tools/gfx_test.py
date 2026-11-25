@@ -4,6 +4,8 @@
     uv run python tools/gfx_test.py pattern         border, grid and diagonal (still image)
     uv run python tools/gfx_test.py env             an envelope morphing for 10 s (animation)
     uv run python tools/gfx_test.py clear
+    uv run python tools/gfx_test.py diag            the device's state (draws, busy, display list)
+    uv run python tools/gfx_test.py variants        each draw variant for 4 s with its state: watch the display
     --port NAME   output port (default: the Launchkey's MIDI port)
     --fps N       frames per second for env (default 10; the device redraws every 100 ms)
 """
@@ -89,6 +91,40 @@ def envelope(a, d, s, r):
     return bm
 
 
+NAMES = ["ms", "ctx", "draws", "busy", "active", "idle", "ring rd", "ring wr", "flags 2DD|2DE<<8", "variant"]
+VARIANTS = {0: "tiles 64 x 8, y in pixels", 1: "fill rectangle pages 2-7", 2: "flash image (boot logo)",
+            3: "tiles 64 x 8, y in pages", 4: "one image 128 x 48"}
+
+
+def open_in(name):
+    import mido
+    names = mido.get_input_names()
+    cand = [n for n in names if "Launchkey" in n and "DAW" not in n] or [n for n in names if "Launchkey" in n]
+    if name:
+        cand = [n for n in names if name.replace(" In", "") in n] or cand
+    if not cand:
+        sys.exit(f"no Launchkey input in {names}")
+    return mido.open_input(cand[0])
+
+
+def diag(port, inp):
+    import mido
+    for _ in inp.iter_pending():
+        pass
+    send(port, [HEAD + [0x06, 0xF7]])
+    t0 = time.time()
+    while time.time() - t0 < 1.0:
+        for m in inp.iter_pending():
+            if m.type == "sysex" and list(m.data[:4]) == [0x7D, 0x4C, 0x4B, 0x06]:
+                d = list(m.data[4:])
+                vals = [sum(d[i * 5 + k] << (28 - 7 * k) for k in range(5)) for i in range(len(d) // 5)]
+                print("  " + ", ".join(f"{n} {v:#x}" if n in ("ctx", "flags 2DD|2DE<<8") else f"{n} {v}"
+                                       for n, v in zip(NAMES, vals)))
+                return vals
+        time.sleep(0.01)
+    print("  no answer (diag needs the test firmware with command 06)")
+
+
 def open_port(name):
     import mido
     names = mido.get_output_names()
@@ -109,7 +145,7 @@ def send(port, msgs):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", nargs="?", default="pattern", choices=["pattern", "env", "clear"])
+    ap.add_argument("what", nargs="?", default="pattern", choices=["pattern", "env", "clear", "diag", "variants"])
     ap.add_argument("--port")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--fps", type=float, default=10)
@@ -119,6 +155,20 @@ def main():
         print("\n".join(mido.get_output_names()))
         return
     port = open_port(a.port)
+    if a.what == "diag":
+        diag(port, open_in(a.port))
+        return
+    if a.what == "variants":
+        inp = open_in(a.port)
+        for v, txt in VARIANTS.items():
+            print(f"variant {v}: {txt}")
+            send(port, [HEAD + [0x07, v, 0xF7]])
+            send(port, messages(pattern(), f"Variant {v}"))
+            time.sleep(1.5)
+            diag(port, inp)
+            time.sleep(2.5)
+        send(port, [HEAD + [0x07, 0, 0xF7]])
+        return
     if a.what == "clear":
         send(port, [HEAD + [0x04, 0xF7]])
     elif a.what == "pattern":

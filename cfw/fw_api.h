@@ -68,6 +68,8 @@ void dl_draw_ptr(void *ctx, const dl_image_desc_t *d, uint32_t x, uint32_t y);
  * to the interpreter's ring at ctx + 0x14); the next command after a commit resets the writer
  * ring, so commands written while the interpreter is busy are lost. */
 uint32_t dl_idle(void *ctx);
+void dl_fill_rect(void *ctx, uint32_t x, uint32_t w, uint32_t y_page, uint32_t pages);
+void dl_draw_image(void *ctx, uint32_t id, uint32_t x, uint32_t y);
 /* SysTick counter, ms (SysTick_Handler 0x08032AB0 adds the byte at 0x20001508 to it) */
 extern volatile uint32_t g_sys_ms;
 

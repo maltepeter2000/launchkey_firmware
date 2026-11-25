@@ -7,6 +7,8 @@
 static uint8_t fb[LKG_PAGES][LKG_W];
 #ifndef LKG_HOST_TEST
 static uint32_t shown_until, next_draw;
+static uint16_t n_draw, n_busy;           /* diagnostics (06) */
+static uint8_t variant;                   /* 07: how to draw, see draw() */
 #endif
 static uint8_t active;
 
@@ -28,12 +30,28 @@ uint32_t lkg_unpack(const uint8_t *in, uint32_t n_in, uint8_t *out, uint32_t max
 static int draw(void)
 {
     void *ctx = disp_dl_ctx();
-    if (!ctx || !dl_idle(ctx))
+    if (!ctx || !dl_idle(ctx)) {
+        n_busy++;
         return 0;
+    }
+    n_draw++;
+    if (variant == 1) {                   /* fill rectangle: pages 2..7, whole width */
+        dl_fill_rect(ctx, 0, 128, LKG_TOP, LKG_PAGES);
+        return 1;
+    }
+    if (variant == 2) {                   /* a flash image: the boot logo (0x27F) at y 16 */
+        dl_draw_image(ctx, 0x27F, 0, LKG_TOP * 8);
+        return 1;
+    }
+    if (variant == 4) {                   /* the whole bitmap as one pointer image */
+        dl_image_desc_t d = {&fb[0][0], LKG_W, LKG_PAGES};
+        dl_draw_ptr(ctx, &d, 0, LKG_TOP * 8);
+        return 1;
+    }
     for (uint32_t p = 0; p < LKG_PAGES; p++)
         for (uint32_t h = 0; h < 2; h++) {
             dl_image_desc_t d = {&fb[p][h * 64], 64, 1};
-            dl_draw_ptr(ctx, &d, h * 64, (LKG_TOP + p) * 8);
+            dl_draw_ptr(ctx, &d, h * 64, variant == 3 ? LKG_TOP + p : (LKG_TOP + p) * 8);   /* 3: y in pages */
         }
     return 1;
 }
@@ -66,6 +84,29 @@ int lkg_sysex(const uint8_t *msg, uint32_t len)
                 fb[p][x] = 0;
         return 1;
     }
+#ifndef LKG_HOST_TEST
+    if (cmd == 0x06) {                    /* diagnostics: reply F0 7D 4C 4B 06 <u32 as 5 x 7 bits> ... F7 */
+        uint8_t *ctx = (uint8_t *)disp_dl_ctx();
+        uint32_t v[10];
+        v[0] = g_sys_ms; v[1] = (uint32_t)ctx; v[2] = n_draw; v[3] = n_busy; v[4] = active;
+        v[5] = ctx ? dl_idle(ctx) : 9;
+        v[6] = ctx ? *(uint32_t *)(ctx + 8) : 0;         /* writer ring read */
+        v[7] = ctx ? *(uint32_t *)(ctx + 12) : 0;        /* writer ring write */
+        v[8] = ctx ? ctx[0x2DD] | (ctx[0x2DE] << 8) : 0;
+        v[9] = variant;
+        midi_port_t *port = g_app_ports[1];
+        midi_put(port, 0xF0); midi_put(port, 0x7D); midi_put(port, 0x4C); midi_put(port, 0x4B); midi_put(port, 0x06);
+        for (uint32_t i = 0; i < 10; i++)
+            for (uint32_t k = 0; k < 5; k++)
+                midi_put(port, (v[i] >> (28 - 7 * k)) & 0x7F);
+        midi_put(port, 0xF7);
+        return 1;
+    }
+    if (cmd == 0x07) {                    /* draw variant: 0 tiles 64x8 (y px), 1 fill, 2 flash logo, 3 tiles (y pages), 4 one image */
+        variant = end > 5 ? msg[5] : 0;
+        return 1;
+    }
+#endif
     if (cmd == 0x03) {
 #ifndef LKG_HOST_TEST
         char title[17];

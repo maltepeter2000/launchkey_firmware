@@ -26,6 +26,8 @@ PROVIDE(ui_popup_begin     = 0x08024F5E | 1);
 PROVIDE(disp_dl_ctx        = 0x080081C6 | 1);   /* returns *(0x2000F4F4) */
 PROVIDE(dl_draw_ptr        = 0x08012204 | 1);
 PROVIDE(dl_idle            = 0x080123F8 | 1);
+PROVIDE(dl_fill_rect       = 0x08012194 | 1);
+PROVIDE(dl_draw_image      = 0x080121D8 | 1);
 PROVIDE(g_sys_ms           = 0x2000150C);
 
 /* input listeners: io_listener lists A..D (max 8 each), relative-input lists (max 4 each) */
