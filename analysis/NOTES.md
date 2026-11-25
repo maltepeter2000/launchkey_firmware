@@ -387,7 +387,7 @@ text into the bitmap. Core clock measured: 338 M cycles in about 4.0 s = **84 MH
 display list busy. Default now: one image of 128 x 48, timing at 84 MHz.
 Fourth test (env animation): moves, but the popup title (sent again every second) was redrawn over the
 bitmap. Now `03` opens an empty popup only once and later only extends the time; the host draws its
-text into the bitmap (`gfx_test.py`: 3 x 5 pixel font). To check on the device: does the bitmap appear, where does the
+text into the bitmap (`gfx_test.py`: 5 x 7 pixel font, 3 x 5 was too small on the device). To check on the device: does the bitmap appear, where does the
 popup title sit, does it flicker, how fast is `gfx_test.py env`.
 
 ## Patches
