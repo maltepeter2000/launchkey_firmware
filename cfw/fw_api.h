@@ -63,6 +63,11 @@ void ui_popup_begin(void);
 typedef struct { const uint8_t *ptr; uint32_t width; uint32_t pages; } dl_image_desc_t;
 void *disp_dl_ctx(void);
 void dl_draw_ptr(void *ctx, const dl_image_desc_t *d, uint32_t x, uint32_t y);
+/* 1 when a new frame can be written: the writer ring (ctx + 4) is empty and the interpreter is
+ * done (flag ctx + 0x2DD). The main loop commits the writer ring every pass (0x08012414, copied
+ * to the interpreter's ring at ctx + 0x14); the next command after a commit resets the writer
+ * ring, so commands written while the interpreter is busy are lost. */
+uint32_t dl_idle(void *ctx);
 /* SysTick counter, ms (SysTick_Handler 0x08032AB0 adds the byte at 0x20001508 to it) */
 extern volatile uint32_t g_sys_ms;
 

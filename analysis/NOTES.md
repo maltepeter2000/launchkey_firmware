@@ -368,8 +368,13 @@ Graphics test (`cfw/lk_gfx.c`, host test `cfw/test/test_lk_gfx.c`, sender `tools
 bitmap in cfw RAM (768 bytes; cfw RAM now 876 of 976), filled by SysEx `F0 7D 4C 4B 02 page x n <7-bit
 packed> F7` (32 columns per message), shown by `03 title` (popup with the title, then the bitmap drawn in
 display pages 2..7 as 12 pointer images of 64 x 8, again every 100 ms for 2 s so popup redraws do not
-hide it), cleared by `04`. Time from the SysTick ms counter at 0x2000150C. **Status: built and
-host-tested, not yet tested on hardware.** To check on the device: does the bitmap appear, where does the
+hide it), cleared by `04`. Time from the SysTick ms counter at 0x2000150C. **First hardware test (2026-11-25): the popup with the title shows, the bitmap does not.** Cause
+found in the code: the main loop commits the writer ring every pass (`0x08012414`: copies ctx + 4 to
+the interpreter ring ctx + 0x14 only when the interpreter is done, flag ctx + 0x2DD, then sets ctx + 0x2DE);
+the first emitter call after a commit (`0x08012122`) resets the writer ring when 0x2DE is set, so
+commands written while the interpreter is busy are dropped. Fix: draw only when `dl_idle(ctx)`
+(`0x080123F8`: writer ring empty and interpreter done), else try again on the next pass.
+**Status: fix built, not yet tested on hardware.** To check on the device: does the bitmap appear, where does the
 popup title sit, does it flicker, how fast is `gfx_test.py env`.
 
 ## Patches

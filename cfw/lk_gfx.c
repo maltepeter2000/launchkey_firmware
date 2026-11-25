@@ -24,14 +24,18 @@ uint32_t lkg_unpack(const uint8_t *in, uint32_t n_in, uint8_t *out, uint32_t max
 }
 
 #ifndef LKG_HOST_TEST
-static void draw(void)
+/* 1 when drawn; 0 when the display list is busy (try again on the next pass) */
+static int draw(void)
 {
     void *ctx = disp_dl_ctx();
+    if (!ctx || !dl_idle(ctx))
+        return 0;
     for (uint32_t p = 0; p < LKG_PAGES; p++)
         for (uint32_t h = 0; h < 2; h++) {
             dl_image_desc_t d = {&fb[p][h * 64], 64, 1};
             dl_draw_ptr(ctx, &d, h * 64, (LKG_TOP + p) * 8);
         }
+    return 1;
 }
 #endif
 
@@ -93,9 +97,7 @@ void lkg_poll(void)
         active = 0;
         return;
     }
-    if ((int32_t)(now - next_draw) >= 0) {
-        draw();
+    if ((int32_t)(now - next_draw) >= 0 && draw())
         next_draw = now + LKG_REDRAW_MS;
-    }
 #endif
 }
