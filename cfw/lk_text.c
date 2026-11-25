@@ -2,6 +2,7 @@
 #include "fw_api.h"
 #include "lk_text.h"
 #include "cc_pages.h"
+#include "lk_gfx.h"
 
 static const uint8_t header[] = {0xF0, 0x7D, 0x4C, 0x4B, 0x01};
 
@@ -44,6 +45,8 @@ void cfw_midi_sysex(midi_port_t *port, const uint8_t *msg, uint32_t len)
         disp_text(1, 1, value_buf);
         return;
     }
+    if (lkg_sysex(msg, len))
+        return;
     port_rx_sysex(port, msg, len);
 }
 #endif

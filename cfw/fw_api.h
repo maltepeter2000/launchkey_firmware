@@ -57,6 +57,15 @@ void disp_set_screen(uint32_t screen, uint32_t template_id);
 void disp_text(uint32_t screen, uint32_t field, const char *str);
 void ui_popup_begin(void);
 
+/* Display list (see NOTES "Graphics on the display"): the writer context (*0x2000F4F4) and the
+ * pointer image: width x pages bytes from ptr (SSD1306 pages, LSB top) at x, y (y a multiple of 8).
+ * The command (8 bytes) is dropped when the 256-byte ring has less than 9 free. */
+typedef struct { const uint8_t *ptr; uint32_t width; uint32_t pages; } dl_image_desc_t;
+void *disp_dl_ctx(void);
+void dl_draw_ptr(void *ctx, const dl_image_desc_t *d, uint32_t x, uint32_t y);
+/* SysTick counter, ms (SysTick_Handler 0x08032AB0 adds the byte at 0x20001508 to it) */
+extern volatile uint32_t g_sys_ms;
+
 /* Input listeners (all called from the main loop). io lists: control id < 0x78. */
 typedef void (*io_listener_fn)(uint32_t id, uint32_t value);
 void io_add_listener_a(io_listener_fn fn);   /* 7 of 8 slots used by stock fw */

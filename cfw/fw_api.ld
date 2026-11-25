@@ -23,6 +23,9 @@ PROVIDE(confstore_mark_dirty = 0x08016F9E | 1);
 PROVIDE(disp_set_screen    = 0x080185C0 | 1);
 PROVIDE(disp_text          = 0x0801867C | 1);
 PROVIDE(ui_popup_begin     = 0x08024F5E | 1);
+PROVIDE(disp_dl_ctx        = 0x080081C6 | 1);   /* returns *(0x2000F4F4) */
+PROVIDE(dl_draw_ptr        = 0x08012204 | 1);
+PROVIDE(g_sys_ms           = 0x2000150C);
 
 /* input listeners: io_listener lists A..D (max 8 each), relative-input lists (max 4 each) */
 PROVIDE(io_add_listener_a  = 0x080144F2 | 1);

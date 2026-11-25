@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "fw_api.h"
 #include "cc_pages.h"
+#include "lk_gfx.h"
 #ifndef CFW_MODES
 #define CFW_MODES 1
 #endif
@@ -50,6 +51,7 @@ void cfw_poll(void)
     }
 #endif
     drum_pads_poll();           /* first: releases its pad LEDs before a mode draws its own */
+    lkg_poll();                 /* host graphics over the popup */
 #if CFW_MODES
     tm_mode_poll();
     seq_mode_poll();
