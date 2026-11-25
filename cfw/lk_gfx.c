@@ -2,6 +2,9 @@
 #include "lk_gfx.h"
 #ifndef LKG_HOST_TEST
 #include "fw_api.h"
+#include "cc_pages.h"
+#else
+static void ccp_host_text(void) {}
 #endif
 
 static uint8_t fb[LKG_PAGES][LKG_W];
@@ -83,6 +86,8 @@ int lkg_sysex(const uint8_t *msg, uint32_t len)
         if (msg[i] != head[i])
             return 0;
     const uint8_t cmd = msg[4];
+    if (cmd >= 0x02 && cmd <= 0x04)
+        ccp_host_text();                  /* the instrument answers: no CC popup of our own (cc_pages.c) */
     const uint32_t end = msg[len - 1] == 0xF7 ? len - 1 : len;   /* data without F7 */
     if (cmd == 0x02) {
         if (end < 8)
