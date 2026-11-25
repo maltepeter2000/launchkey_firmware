@@ -149,7 +149,7 @@ int main(void)
         /* the host stops answering (Pd closed): after CCP_HOST_MISSES silent turns the CC
          * display is back; the next text switches it off again */
         pb = n_popup_begin;
-        for (int k = 0; k < 4; k++)
+        for (int k = 0; k < 16; k++)          /* CCP_HOST_MISSES */
             CHECK(ccp_enc_event(0, ENC(8), 1) == 1);
         CHECK(n_popup_begin == pb);
         CHECK(ccp_enc_event(0, ENC(8), 1) == 1 && n_popup_begin == pb + 1);

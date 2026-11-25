@@ -9,6 +9,9 @@ static void ccp_host_text(void) {}
 
 static uint8_t fb[LKG_PAGES][LKG_W];
 #ifndef LKG_HOST_TEST
+static const uint8_t blank[LKG_TOP * LKG_W];   /* flash: clears the rows above the bitmap */
+#endif
+#ifndef LKG_HOST_TEST
 /* Time: the SysTick counter at 0x2000150C stays 0 on the device (hardware test 2026-11-25), so
  * the Cortex-M4 cycle counter (DWT CYCCNT) is used, counted in units of 2^16 cycles
  * at the measured core clock. */
@@ -66,6 +69,8 @@ static int draw(void)
     if (variant == 0) {                   /* default: the whole bitmap as one pointer image (works) */
         dl_image_desc_t d = {&fb[0][0], LKG_W, LKG_PAGES};
         dl_draw_ptr(ctx, &d, 0, LKG_TOP * 8);
+        dl_image_desc_t b = {blank, LKG_W, LKG_TOP};   /* rest of a popup text above it */
+        dl_draw_ptr(ctx, &b, 0, 0);
         return 1;
     }
     for (uint32_t p = 0; p < LKG_PAGES; p++)

@@ -391,7 +391,10 @@ text into the bitmap (`gfx_test.py`: 5 x 7 pixel font, 3 x 5 was too small on th
 With pdoly8 (Pd, 2026-11-25): turning an encoder showed the CC pages' own popup ("P1 Ch1 cc20")
 instead of the picture - picture messages did not count as an answer of the instrument, so after 4
 turns `host_miss` brought the CC popup back over it. Now every graphics message calls
-`ccp_host_text()` like display text. To check on the device: does the bitmap appear, where does the
+`ccp_host_text()` like display text. Hardware test with pdoly8 (2026-11-25): pictures appear; on fast turns the CC popup still came
+in between (4 turns without an answer were too few: pictures come at most every 50 ms) and left
+text rests above the bitmap. Now `CCP_HOST_MISSES` 16, and every redraw also clears the 16 rows
+above the bitmap (a pointer image from 256 zero bytes in flash). To check on the device: does the bitmap appear, where does the
 popup title sit, does it flicker, how fast is `gfx_test.py env`.
 
 ## Patches

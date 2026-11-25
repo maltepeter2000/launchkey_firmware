@@ -40,7 +40,7 @@
 #define CCP_PAGES         11
 #define CCP_STEP          1           /* value change per encoder tick */
 #define CCP_SYNC_CC       3
-#define CCP_HOST_MISSES   4           /* unanswered turns until the CC display comes back */           /* undefined in MIDI 1.0: "send me your values" for the Pd layer */
+#define CCP_HOST_MISSES   16          /* unanswered turns until the CC display comes back (pictures come at most every 50 ms: 4 was too few for a fast turn) */           /* undefined in MIDI 1.0: "send me your values" for the Pd layer */
 
 #define ENC_FIRST         56          /* encoder 1 */
 #define ENC_COUNT         8
