@@ -3,8 +3,9 @@
  *   F0 7D 4C 4B 02 page x n <packed> F7   n bytes (1..32) into the bitmap: page 0..5 (8 pixel rows
  *                                         each, LSB top), columns x .. x+n-1; packed = MIDI 7-bit
  *                                         groups (a byte of high bits, then up to 7 low bytes)
- *   F0 7D 4C 4B 03 title F7               show: the popup with title (first line) and the bitmap
- *                                         in pages 2..7 of the display, redrawn for LKG_SHOW_MS
+ *   F0 7D 4C 4B 03 F7                     show: the bitmap in pages 2..7 of the display (over an
+ *                                         empty popup, opened by the first show), redrawn for
+ *                                         LKG_SHOW_MS after the last show; text goes into the bitmap
  *   F0 7D 4C 4B 04 F7                     clear the bitmap
  *
  * The bitmap is drawn with the display list's pointer image (opcode 0x4p, dl_draw_ptr), in 64 x 8

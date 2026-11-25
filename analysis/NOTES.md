@@ -384,7 +384,10 @@ the flash image (boot logo) too. **y is in pixels** (y in pages draws garbage at
 title sits in the middle of the display and is covered by the bitmap, so the host has to put its
 text into the bitmap. Core clock measured: 338 M cycles in about 4.0 s = **84 MHz**; main loop about
 410 passes a second (2.4 ms); with a redraw every 200 ms about 15 % of the attempts found the
-display list busy. Default now: one image of 128 x 48, timing at 84 MHz. To check on the device: does the bitmap appear, where does the
+display list busy. Default now: one image of 128 x 48, timing at 84 MHz.
+Fourth test (env animation): moves, but the popup title (sent again every second) was redrawn over the
+bitmap. Now `03` opens an empty popup only once and later only extends the time; the host draws its
+text into the bitmap (`gfx_test.py`: 3 x 5 pixel font). To check on the device: does the bitmap appear, where does the
 popup title sit, does it flicker, how fast is `gfx_test.py env`.
 
 ## Patches

@@ -28,6 +28,20 @@ def pack7(data):
     return out
 
 
+# 3 x 5 pixel font (rows top to bottom, 3 bits each, MSB left): digits, capitals, a few signs
+_F = {
+    "0": [7, 5, 5, 5, 7], "1": [2, 6, 2, 2, 7], "2": [7, 1, 7, 4, 7], "3": [7, 1, 3, 1, 7], "4": [5, 5, 7, 1, 1],
+    "5": [7, 4, 7, 1, 7], "6": [7, 4, 7, 5, 7], "7": [7, 1, 2, 2, 2], "8": [7, 5, 7, 5, 7], "9": [7, 5, 7, 1, 7],
+    "A": [2, 5, 7, 5, 5], "B": [6, 5, 6, 5, 6], "C": [3, 4, 4, 4, 3], "D": [6, 5, 5, 5, 6], "E": [7, 4, 6, 4, 7],
+    "F": [7, 4, 6, 4, 4], "G": [3, 4, 5, 5, 3], "H": [5, 5, 7, 5, 5], "I": [7, 2, 2, 2, 7], "J": [1, 1, 1, 5, 2],
+    "K": [5, 5, 6, 5, 5], "L": [4, 4, 4, 4, 7], "M": [5, 7, 7, 5, 5], "N": [6, 5, 5, 5, 5], "O": [2, 5, 5, 5, 2],
+    "P": [6, 5, 6, 4, 4], "Q": [2, 5, 5, 6, 3], "R": [6, 5, 6, 5, 5], "S": [3, 4, 2, 1, 6], "T": [7, 2, 2, 2, 2],
+    "U": [5, 5, 5, 5, 7], "V": [5, 5, 5, 5, 2], "W": [5, 5, 7, 7, 5], "X": [5, 5, 2, 5, 5], "Y": [5, 5, 2, 2, 2],
+    "Z": [7, 1, 2, 4, 7], " ": [0, 0, 0, 0, 0], "-": [0, 0, 7, 0, 0], ".": [0, 0, 0, 0, 2], ":": [0, 2, 0, 2, 0],
+    "/": [1, 1, 2, 4, 4], "%": [5, 1, 2, 4, 5], "'": [2, 2, 0, 0, 0],
+}
+
+
 class Bitmap:
     def __init__(self):
         self.px = [[0] * W for _ in range(H)]
@@ -42,18 +56,31 @@ class Bitmap:
             t = i / n
             self.set(round(x0 + (x1 - x0) * t), round(y0 + (y1 - y0) * t))
 
+    def text(self, x, y, t, scale=1):
+        """3 x 5 font, capitals; returns the x after the text"""
+        for ch in t.upper():
+            rows = _F.get(ch, _F[" "])
+            for r, bits in enumerate(rows):
+                for c in range(3):
+                    if bits >> (2 - c) & 1:
+                        for dy in range(scale):
+                            for dx in range(scale):
+                                self.set(x + c * scale + dx, y + r * scale + dy)
+            x += 4 * scale
+        return x
+
     def pages(self):
         """SSD1306 pages: per page and column one byte, LSB = top row"""
         return [[sum(self.px[p * 8 + b][x] << b for b in range(8)) for x in range(W)] for p in range(PAGES)]
 
 
-def messages(bm, title=None):
+def messages(bm, show=True):
     msgs = []
     for p, row in enumerate(bm.pages()):
         for x in range(0, W, 32):
             msgs.append(HEAD + [0x02, p, x, 32] + pack7(row[x:x + 32]) + [0xF7])
-    if title is not None:
-        msgs.append(HEAD + [0x03] + [ord(c) for c in title[:16]] + [0xF7])
+    if show:
+        msgs.append(HEAD + [0x03, 0xF7])
     return msgs
 
 
@@ -74,10 +101,11 @@ def pattern():
     return bm
 
 
-def envelope(a, d, s, r):
-    """ADSR as a polyline in the bitmap: times as fractions of the width, s 0..1"""
+def envelope(a, d, s, r, title=""):
+    """ADSR as a polyline below a text line: times as fractions of the width, s 0..1"""
     bm = Bitmap()
-    top, bot = 2, H - 3
+    bm.text(0, 0, title)
+    top, bot = 9, H - 3
     y = lambda v: bot - v * (bot - top)
     xa, xd = a * 40, a * 40 + d * 40
     xs = xd + 24
@@ -163,7 +191,7 @@ def main():
         for v, txt in VARIANTS.items():
             print(f"variant {v}: {txt}")
             send(port, [HEAD + [0x07, v, 0xF7]])
-            send(port, messages(pattern(), f"Variant {v}"))
+            send(port, messages(pattern()))
             time.sleep(1.5)
             diag(port, inp)
             time.sleep(2.5)
@@ -172,17 +200,16 @@ def main():
     if a.what == "clear":
         send(port, [HEAD + [0x04, 0xF7]])
     elif a.what == "pattern":
-        send(port, messages(pattern(), "Pattern"))
+        bm = pattern()
+        send(port, messages(bm))
     else:
-        t0 = time.time(); last_title = 0
+        t0 = time.time()
         while time.time() - t0 < 10:
             t = time.time() - t0
             m = 0.5 - 0.5 * math.cos(t * 0.8)
-            bm = envelope(0.05 + 0.9 * m, 0.3 + 0.5 * (1 - m), 0.2 + 0.6 * m, 0.2 + 0.8 * m)
-            title = None
-            if t - last_title > 1.0 or last_title == 0:      # show (popup) once a second keeps it up
-                title, last_title = f"Env 1 {int(m * 127):3d}", t
-            send(port, messages(bm, title))
+            bm = envelope(0.05 + 0.9 * m, 0.3 + 0.5 * (1 - m), 0.2 + 0.6 * m, 0.2 + 0.8 * m,
+                          f"ENV 1 MORPH {int(m * 127)}")
+            send(port, messages(bm))
             time.sleep(1 / a.fps)
 
 

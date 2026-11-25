@@ -14,4 +14,4 @@
 0x080235d2  f9f7b2fa  13f07dfe   # bl cfw_enc_set_page  was: bl enc_set_page (up/down handler)
 0x080235d8  fff7effe  13f08efe   # bl cfw_enc_page_popup  was: bl ui_show_enc_page (up/down handler)
 0x0803049a  01f086f9  07f023fa   # bl cfw_midi_rx  was: bl midi_port_rx_notes (MIDI port message handler 0x0803048C)
-0x080108cc  c7040308  d9810308   # word cfw_midi_sysex  was: .word 0x080304C7 (MIDI port SysEx handler, main's table)
+0x080108cc  c7040308  a9810308   # word cfw_midi_sysex  was: .word 0x080304C7 (MIDI port SysEx handler, main's table)

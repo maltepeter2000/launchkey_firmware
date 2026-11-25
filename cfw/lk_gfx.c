@@ -126,18 +126,18 @@ int lkg_sysex(const uint8_t *msg, uint32_t len)
 #endif
     if (cmd == 0x03) {
 #ifndef LKG_HOST_TEST
-        char title[17];
-        uint32_t k = 0;
-        for (uint32_t i = 5; i < end && k < 16; i++)
-            title[k++] = (msg[i] >= 0x20 && msg[i] < 0x7F) ? (char)msg[i] : '?';
-        title[k] = 0;
-        ui_popup_begin();
-        disp_set_screen(1, 0);
-        disp_text(1, 0, title);
-        disp_text(1, 1, "");
+        /* the popup only once (empty: its text would sit in the middle of the bitmap and every
+         * text change redraws it over the bitmap); later shows only keep it up. The host draws
+         * its own text into the bitmap. */
         const uint32_t now = now_cyc();
+        if (!active) {
+            ui_popup_begin();
+            disp_set_screen(1, 0);
+            disp_text(1, 0, "");
+            disp_text(1, 1, "");
+            next_draw = now + LKG_MS(20); /* after the popup has drawn its fields */
+        }
         shown_until = now + LKG_MS(LKG_SHOW_MS);
-        next_draw = now + LKG_MS(20);     /* after the popup has drawn its fields */
 #endif
         active = 1;
         return 1;
