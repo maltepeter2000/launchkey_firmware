@@ -24,9 +24,20 @@ OBJDUMP  := xcrun llvm-objdump
 ARMCC    := xcrun clang -target thumbv7em-none-eabi -mcpu=cortex-m4 -mthumb -mfloat-abi=soft
 ARMFLAGS := -std=c11 -Os -fomit-frame-pointer -ffreestanding -fno-builtin -ffunction-sections -fdata-sections -Wall -Wextra -Werror
 LLD      := ld.lld
+# CFW_MODES=0 (branch display-gfx): without the step sequencers and Turing Machine mode, so their
+# RAM is free for the display graphics test; drum pads, display text and CC pages stay.
+CFW_MODES ?= 0
 CFW_SRC  := $(wildcard cfw/*.c)
+ifeq ($(CFW_MODES),0)
+CFW_SRC  := $(filter-out cfw/seq_%.c cfw/tm_%.c,$(CFW_SRC))
+ARMFLAGS += -DCFW_MODES=0
+CFW_HOOKS := cfw/hooks-nomodes.txt
+else
+ARMFLAGS += -DCFW_MODES=1
+CFW_HOOKS := cfw/hooks.txt
+endif
 CFW_OBJ  := $(patsubst cfw/%.c,build/cfw/%.o,$(CFW_SRC))
-CFW_HOOK_SYMS := $(shell awk '!/^[[:space:]]*(\#|$$)/ {print "-u " $$3}' cfw/hooks.txt)
+CFW_HOOK_SYMS := $(shell awk '!/^[[:space:]]*(\#|$$)/ {print "-u " $$3}' $(CFW_HOOKS))
 
 all: $(ELF)
 
@@ -55,8 +66,8 @@ build/cfw.elf: $(CFW_OBJ) cfw/cfw.ld cfw/fw_api.ld
 	$(LLD) -T cfw/cfw.ld -L cfw --gc-sections -e cfw_init $(CFW_HOOK_SYMS) -Map build/cfw.map -o $@ $(CFW_OBJ)
 
 # one mkcave run writes both files (make 3.81 has no grouped targets)
-patches/100-cfw-code.patch: build/cfw.elf cfw/hooks.txt $(BIN) tools/mkcave.py
-	$(PY) tools/mkcave.py build/cfw.elf cfw/hooks.txt $(BIN) $(CFW_PATCHES)
+patches/100-cfw-code.patch: build/cfw.elf $(CFW_HOOKS) $(BIN) tools/mkcave.py
+	$(PY) tools/mkcave.py build/cfw.elf $(CFW_HOOKS) $(BIN) $(CFW_PATCHES)
 patches/101-cfw-hooks.patch: patches/100-cfw-code.patch
 
 cfw: $(CFW_PATCHES)

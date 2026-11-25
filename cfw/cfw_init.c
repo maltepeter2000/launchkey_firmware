@@ -2,9 +2,17 @@
 #include "drum_pads.h"
 #include <stdint.h>
 #include "fw_api.h"
-#include "tm_mode.h"
 #include "cc_pages.h"
+#ifndef CFW_MODES
+#define CFW_MODES 1
+#endif
+#if CFW_MODES
+#include "tm_mode.h"
 #include "seq_mode.h"
+#else                           /* without the modes (branch display-gfx): the CC pages decide alone */
+#define TM_PASS      0
+#define TM_ENC_ONLY  2
+#endif
 
 extern uint32_t __cfw_bss_start[], __cfw_bss_end[];
 
@@ -14,30 +22,38 @@ void cfw_init(void)
     feat_scale_init();
     for (uint32_t *p = __cfw_bss_start; p < __cfw_bss_end; p++)
         *p = 0;
+#if CFW_MODES
     tm_mode_init();
     seq_mode_init();
+#endif
 }
 
+#if CFW_MODES
 /* One feature listener for all cfw modes (the stock list has 8 slots, 6 used). */
 static void feat_changed(uint32_t id, uint32_t value)
 {
     tm_feat_changed(id, value);
     seq_feat_changed(id, value);
 }
+#endif
 
 /* Hook: replaces one `bl confstore_poll` in the main loop (0x0801048A). */
 void cfw_poll(void)
 {
-    static uint8_t started;
     confstore_poll();
+#if CFW_MODES
+    static uint8_t started;
     if (!started) {             /* first pass: all stock init is done */
         started = 1;
         feat_add_listener(feat_changed);
         inmidi_add_out_listener(seq_note_out);
     }
+#endif
     drum_pads_poll();           /* first: releases its pad LEDs before a mode draws its own */
+#if CFW_MODES
     tm_mode_poll();
     seq_mode_poll();
+#endif
 }
 
 /* Hook: replaces `bl midi_port_rx_notes` in the MIDI port's message handler (0x0803049A).
@@ -46,13 +62,16 @@ void cfw_poll(void)
 uint32_t cfw_midi_rx(midi_port_t *port, uint32_t status, uint32_t d1, uint32_t d2)
 {
     ccp_midi_rx(status, d1, d2);                 /* CC feedback for the CC pages, only reads */
+#if CFW_MODES
     if (seq_midi_rx(status, d1, d2))
         return 1;
+#endif
     if (drum_pads_midi_rx(status, d1, d2))
         return 1;
     return midi_port_rx_notes(port, status, d1, d2);
 }
 
+#if CFW_MODES
 /* Hooks: replace the calls for MIDI Start / Continue / Stop in midi_rx_realtime (0x08030968,
  * 0x08030972, 0x0803097C; both USB ports end up there). The stock clock still gets them. */
 void cfw_rt_start(void)
@@ -72,6 +91,7 @@ void cfw_rt_stop(void)
     clock_rt_stop();
     seq_transport(0);
 }
+#endif
 
 /* Hook: replaces `bl fmt_version` in ui_show_boot_screen (0x08016E42). Visible proof that cave code runs. */
 uint32_t cfw_boot_version(char *buf, uint32_t pos, uint32_t size, const uint32_t *ver)
@@ -87,15 +107,24 @@ uint32_t cfw_boot_version(char *buf, uint32_t pos, uint32_t size, const uint32_t
  * (cc_pages.c). */
 static int io_event(int list, uint32_t id, uint32_t v)
 {
+#if CFW_MODES
     int r = tm_io_event(list, id, v);
     if (r == TM_PASS)
         r = seq_io_event(list, id);
     return r == TM_PASS ? ccp_io_event(list, id) : r;
+#else
+    (void)v;
+    return ccp_io_event(list, id);
+#endif
 }
 
 static int enc_event(int list, uint32_t id, int32_t d)
 {
+#if CFW_MODES
     return tm_enc_event(list, id, d) || seq_enc_event(list, id, d) || ccp_enc_event(list, id, d);
+#else
+    return ccp_enc_event(list, id, d);
+#endif
 }
 
 typedef void (*io2_fn)(uint32_t, uint32_t);

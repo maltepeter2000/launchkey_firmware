@@ -1,0 +1,37 @@
+# Hooks for CFW_MODES=0 (branch display-gfx): as hooks.txt without the transport hooks of the step
+# sequencers (MIDI Start / Continue / Stop stay stock).
+#
+# Hooks from the stock firmware into cfw code. tools/mkcave.py turns these into
+# patches/101-cfw-hooks.patch.
+#
+#   <address>  bl|b.w|word  <cfw symbol>  <original bytes hex>   # comment
+#   word: a function pointer in a table (the symbol's Thumb address)
+#
+# The original bytes are verified, so a hook never lands on the wrong instruction.
+
+0x0801592c  bl  cfw_init          09f010ff   # was: bl feat_scale_init (end of feature init)
+0x08016e42  bl  cfw_boot_version  11f072f8   # was: bl fmt_version (boot screen "Ver: ...")
+0x0801048a  bl  cfw_poll          06f0b0fd   # was: bl confstore_poll (last of 5 calls in the main loop)
+
+# io_listener dispatchers -> cfw versions (filter pad events while Turing Machine mode owns them)
+0x0801b530  b.w cfw_io_dispatch_a f8b50446   # was: push {r3-r7,lr}; mov r4,r0
+0x0801b54c  b.w cfw_io_dispatch_b f8b50446
+0x0801b574  b.w cfw_io_dispatch_c 70b50446   # was: push {r4-r6,lr}; mov r4,r0
+0x0801b592  b.w cfw_io_dispatch_d f8b50446
+
+# encoder (relative input) dispatchers -> cfw versions (encoders 1..5 belong to Turing Machine mode)
+0x08020e48  b.w cfw_relin_dispatch_pos   2de9f041   # was: push.w {r4-r8,lr}
+0x08020e56  b.w cfw_relin_dispatch_hires 2de9f041
+0x08020e8a  b.w cfw_relin_dispatch_step  2de9f041
+
+# encoder pages: Custom 1 gets 12 pages of CCs (cfw/cc_pages.c)
+0x0801cba6  b.w cfw_enc_page_count 10b1801f   # was: cbz r0,...; subs r0,r0,#6 (enc_page_count, whole function replaced)
+0x080235d2  bl  cfw_enc_set_page   f9f7b2fa   # was: bl enc_set_page (up/down handler)
+0x080235d8  bl  cfw_enc_page_popup fff7effe   # was: bl ui_show_enc_page (up/down handler)
+
+# MIDI in: CC feedback for the CC pages, pad LED notes (cfw/cfw_init.c)
+0x0803049a  bl  cfw_midi_rx        01f086f9   # was: bl midi_port_rx_notes (MIDI port message handler 0x0803048C)
+
+
+# MIDI in: SysEx on the MIDI port -> display text from the host (cfw/lk_text.c), the rest goes on
+0x080108cc  word cfw_midi_sysex   c7040308   # was: .word 0x080304C7 (MIDI port SysEx handler, main's table)

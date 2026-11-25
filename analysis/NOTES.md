@@ -332,6 +332,38 @@ Static analysis for the step sequencer; nothing in this section is confirmed on 
   no timer needed. 2 bytes RAM.
   (Tested on hardware 2026-11-20: the display text arrives from Pd on macOS.)
 
+## Graphics on the display (analysis 2026-11-25, not yet tested on hardware)
+
+Goal: curves (pdoly8 DEG / timbre) from the host as pixels. Findings in the display list:
+
+- Display-list opcodes (`dl_interpret` @0x0801244C, `tbb` on op >> 4): 0x00..0x3F = image from the flash
+  table (12-bit id = (op & 0xF) << 8 | next byte, mode bits 4..5); **0x4p = image from a pointer**:
+  `0x40 | pages`, width, 4 bytes pointer (LE), x (px), y (px, a multiple of 8); 0xC0 | n and 0xE0 are the
+  other emitters below. The pointer can be any address: the interpreter reads the bytes when it sends them.
+- Emitters (write into the writer's 256-byte ring at ctx + 4, ctx = `*(0x2000F4F4)`, getter 0x080081C6):
+  `0x08012204 dl_draw_ptr(ctx, desc{ptr, width, pages}, x, y)` (8 bytes, needs 9 free),
+  `dl_fill_rect` @0x08012194 `(ctx, x, w, y_page, pages)` -> `E0 x w (pages | y_page << 4)` (page granular;
+  init clears the screen with (0, 128, 0, 8)), `dl_draw_image` @0x080121D8 (flash image id).
+  Each emitter first checks the free space and drops the command when the ring is full.
+- `disp_render_template` draws field type 3 (`{ptr, width, pages}` in the screen's field buffer) through
+  dl_draw_ptr: a template field can show a bitmap from RAM.
+- A stock SysEx command (handler @0x08031380, msg[6] = 0x70, msg[7] = 0x22) draws a full 128 x 64 test
+  pattern as 16 dl_draw_ptr calls (64 x 1 page each, x = 0 / 64, y = page * 8) from a flash tile table;
+  0x20 / 0x21 switch the display (`0x08011F16(dev, on)`). This is the template for host bitmaps.
+- **RAM is the limit:** a 128 x 64 frame is 1 KiB, cfw RAM has 16 bytes left and the stack margin is
+  ~750 bytes. Ways without a frame buffer: (a) a 256-byte flash table GLYPH[i] = i and one 1-column
+  dl_draw_ptr per column byte (8 bytes in the ring per column, ring drained by calling the interpreter);
+  (b) the host sends small chunks (one page, up to 32 columns), decoded into a stack buffer and drawn
+  with one dl_draw_ptr whose bytes are consumed before the handler returns - only safe if the
+  interpreter copies synchronously (to be checked: it may hand the pointer to SPI DMA).
+  Open: SysEx length limit of the stock receiver, how the popup redraw interacts, transfer speed.
+
+Branch `display-gfx` (2026-11-25): `make cfw` builds with `CFW_MODES=0` by default: without the step
+sequencers and Turing Machine mode (sources left out, `cfw/hooks-nomodes.txt` without the transport
+hooks); drum pads, display text and CC pages stay. Result: 2 992 bytes code, **96 of 976 bytes cfw RAM**
+(was 964): 880 bytes free, enough for a 128 x 48 (6 pages, 768 bytes) or 128 x 40 bitmap buffer, not
+for the full 128 x 64. `make cfw CFW_MODES=1` builds everything as on main.
+
 ## Patches
 
 - `010-boot-logo.patch` – generated from `assets/boot_logo.txt`: adds an inverted "CFW" badge right of the
