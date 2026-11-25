@@ -39,6 +39,7 @@ void cfw_midi_sysex(midi_port_t *port, const uint8_t *msg, uint32_t len)
     char title_buf[LKT_MAX + 1], value_buf[LKT_MAX + 1];   /* disp_text copies (as in cc_pages.c) */
     if (lkt_parse(msg, len, title_buf, value_buf)) {
         ccp_host_text();
+        lkg_stop();                     /* a picture shown until now would be drawn over the text */
         ui_popup_begin();
         disp_set_screen(1, 0);
         disp_text(1, 0, title_buf);

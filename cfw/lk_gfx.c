@@ -155,6 +155,8 @@ int lkg_sysex(const uint8_t *msg, uint32_t len)
     return 0;
 }
 
+void lkg_stop(void) { active = 0; }
+
 void lkg_poll(void)
 {
 #ifndef LKG_HOST_TEST

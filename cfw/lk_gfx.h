@@ -24,6 +24,8 @@
 int lkg_sysex(const uint8_t *msg, uint32_t len);
 /* main loop: draws while shown */
 void lkg_poll(void);
+/* display text came: stop drawing the picture over it (the next show opens the popup again) */
+void lkg_stop(void);
 
 /* for host tests: unpack MIDI 7-bit groups, returns bytes written (at most max) */
 uint32_t lkg_unpack(const uint8_t *in, uint32_t n_in, uint8_t *out, uint32_t max);
