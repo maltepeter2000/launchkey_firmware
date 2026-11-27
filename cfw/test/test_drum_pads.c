@@ -79,8 +79,8 @@ int main(void)
     CHECK(drum_pads_color(0) == 0x000000);
     CHECK(drum_pads_color(1) == 0xFFFFFF);
     CHECK(drum_pads_color(7) == 0x0040FF);
-    CHECK(drum_pads_color(17) == 0x3F3F3F);           /* dim white */
-    CHECK(drum_pads_color(16 + 2) == 0x3F0000);       /* dim red */
+    CHECK(drum_pads_color(17) == 0x0F0F0F);           /* dim white */
+    CHECK(drum_pads_color(16 + 2) == 0x0F0000);       /* dim red */
 
     /* pad LEDs: leave drum mode first so the next poll is an entry */
     static int port;
@@ -104,7 +104,7 @@ int main(void)
     CHECK(drum_pads_midi_rx(0x99, 51, 32 + 3) == 1);   /* pad 15 orange flash */
     CHECK(led_rgb[15] == 0xFF4000 && led_mode[15] == 1);
     CHECK(drum_pads_midi_rx(0x99, 44, 64 + 16 + 5) == 1); /* pad 8 dim green pulse */
-    CHECK(led_rgb[8] == 0x003F00 && led_mode[8] == 2);
+    CHECK(led_rgb[8] == 0x000F00 && led_mode[8] == 2);
     CHECK(drum_pads_midi_rx(0x99, 45, 96 + 2) == 1);   /* mode 3 = static */
     CHECK(led_mode[9] == 0);
     CHECK(drum_pads_midi_rx(0x99, 37, 0) == 1);        /* velocity 0 on a free pad: no call */

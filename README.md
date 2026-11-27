@@ -49,7 +49,7 @@ Velocity 0 (or a note off) gives the pad back to the normal LED. Colours:
 | 2 | red | 6 | cyan | 10 | lime | 14 | sky blue |
 | 3 | orange | 7 | blue | 11 | teal | 15 | warm white |
 
-16–31 are the same colours dimmed (16 + n = colour n at a quarter brightness). Example: velocity 7 = blue,
+16–31 are the same colours dimmed (16 + n = colour n at a sixteenth of the brightness). Example: velocity 7 = blue,
 39 (7 + 32) = flashing blue, 0 = normal again.
 
 When you switch to pad mode Drum, the Launchkey sends **CC 3 = 127** on the Drums Channel, so the host can

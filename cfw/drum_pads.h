@@ -21,7 +21,7 @@
  * g_ctl_param) when pad_mode is the Drum layout. Returns the number of entries changed. */
 int drum_pads_apply(uint32_t pad_mode, uint32_t *table);
 
-/* Colour index 0..31 -> 0xRRGGBB: 0..15 bright, 16..31 the same colours dimmed. */
+/* Colour index 0..31 -> 0xRRGGBB: 0..15 bright, 16..31 the same colours dimmed (a sixteenth). */
 uint32_t drum_pads_color(uint32_t index);
 
 /* MIDI port input (from cfw_midi_rx, before the stock handler). Returns 1 when the message
