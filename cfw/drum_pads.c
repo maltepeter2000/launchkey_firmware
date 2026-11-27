@@ -38,8 +38,8 @@ static uint8_t in_drum;         /* pad mode Drum seen by the last poll */
 uint32_t drum_pads_color(uint32_t index)
 {
     uint32_t rgb = palette[index & 15];
-    if (index & 16)             /* dimmed: a quarter */
-        rgb = (rgb >> 2) & 0x3F3F3F;
+    if (index & 16)             /* dimmed: a sixteenth (a quarter looked nearly as bright as on) */
+        rgb = (rgb >> 4) & 0x0F0F0F;
     return rgb;
 }
 
